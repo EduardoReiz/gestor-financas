@@ -9,6 +9,7 @@ const secoes = [
   { para: '/metas', nome: 'Metas', Icone: IconeAlvo, naBarra: true },
   { para: '/investimentos', nome: 'Investimentos', Icone: IconeAlvo, naBarra: false },
   { para: '/sugestoes', nome: 'Sugestões', Icone: IconeAlvo, naBarra: false },
+  { para: '/aparelhos', nome: 'Aparelhos', Icone: IconeAlvo, naBarra: false },
 ]
 
 // Celular: barra embaixo. Mac (tela larga): menu lateral.

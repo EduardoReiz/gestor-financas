@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/browser'
 
 export type Sentido = 'ENTRADA' | 'SAIDA'
 
@@ -59,8 +63,35 @@ async function pedir<T>(caminho: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   })
-  if (!resposta.ok) throw new Error(`A API respondeu ${resposta.status}`)
+  if (resposta.status === 401 && !caminho.startsWith('/auth/')) {
+    // sessão venceu ou foi encerrada: volta para a tela de entrar
+    window.dispatchEvent(new Event('gf:sessao-encerrada'))
+  }
+  if (!resposta.ok) {
+    const corpo = await resposta.json().catch(() => null)
+    throw new Error(corpo?.message ?? `A API respondeu ${resposta.status}`)
+  }
   return resposta.status === 204 ? (undefined as T) : resposta.json()
+}
+
+export interface Aparelho {
+  id: string
+  aparelho: string
+  criadaEm: string
+  usadaEm: string | null
+}
+
+const postar = (corpo: unknown) => ({ method: 'POST', body: JSON.stringify(corpo) })
+
+export const auth = {
+  estado: () => pedir<{ logado: boolean; primeiroAcesso: boolean }>('/auth/estado'),
+  opcoesCadastro: (codigo?: string) => pedir<PublicKeyCredentialCreationOptionsJSON>('/auth/cadastro/opcoes', postar({ codigo })),
+  verificarCadastro: (resposta: unknown, aparelho: string) => pedir<void>('/auth/cadastro/verificar', postar({ resposta, aparelho })),
+  opcoesEntrada: () => pedir<PublicKeyCredentialRequestOptionsJSON>('/auth/entrar/opcoes', postar({})),
+  verificarEntrada: (resposta: unknown) => pedir<void>('/auth/entrar/verificar', postar({ resposta })),
+  sair: () => pedir<void>('/auth/sair', { method: 'POST' }),
+  aparelhos: () => pedir<Aparelho[]>('/auth/aparelhos'),
+  removerAparelho: (id: string) => pedir<void>(`/auth/aparelhos/${id}`, { method: 'DELETE' }),
 }
 
 export const api = {

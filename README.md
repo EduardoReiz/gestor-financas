@@ -16,5 +16,11 @@ npm run start:dev                    # API em http://127.0.0.1:3100/api
 cd ../web && npm install && npm run dev   # app em http://localhost:5173
 ```
 
+## Entrar
+
+O app só abre com passkey (Face ID / Touch ID). No primeiro acesso ele pede o
+`CODIGO_CADASTRO` que está em `backend/.env`; depois disso, outros aparelhos
+só são cadastrados por quem já entrou (tela Aparelhos).
+
 Antes da primeira vez: copie `.env.example` para `.env` (na raiz e em `backend/`)
 e troque a senha do banco.

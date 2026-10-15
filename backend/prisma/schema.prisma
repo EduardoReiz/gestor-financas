@@ -19,12 +19,27 @@ datasource db {
 // Face ID / Touch ID (WebAuthn). Uma linha por aparelho cadastrado.
 model Passkey {
   id           String    @id @default(cuid())
-  credentialId String    @unique
+  credentialId String    @unique // base64url, como o navegador manda
   chavePublica Bytes
   contador     Int       @default(0)
+  transports   String[] // "internal", "hybrid"... ajuda o navegador a achar a passkey
   aparelho     String // "iPhone", "MacBook Air"
   criadaEm     DateTime  @default(now())
   usadaEm      DateTime?
+  sessoes      Sessao[]
+}
+
+// Sessão aberta depois do Face ID. O cookie leva um token aleatório; aqui fica
+// só o hash dele, então quem ler o banco não consegue se passar por você.
+model Sessao {
+  id        String   @id // sha256 do token
+  passkeyId String
+  passkey   Passkey  @relation(fields: [passkeyId], references: [id], onDelete: Cascade)
+  criadaEm  DateTime @default(now())
+  expiraEm  DateTime
+  usadaEm   DateTime @default(now())
+
+  @@index([expiraEm])
 }
 
 // Inscrição do web push de cada aparelho (para a notificação diária).
