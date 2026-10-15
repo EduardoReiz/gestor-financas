@@ -1,0 +1,17 @@
+# Banco de desenvolvimento. No servidor, o mesmo arquivo sobe junto com o back-end.
+services:
+  banco:
+    image: postgres:17
+    container_name: gestor_financas_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gestor_financas
+      POSTGRES_USER: gestor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    ports:
+      - "127.0.0.1:5434:5432" # só a própria máquina enxerga
+    volumes:
+      - dados_banco:/var/lib/postgresql/data
+
+volumes:
+  dados_banco:

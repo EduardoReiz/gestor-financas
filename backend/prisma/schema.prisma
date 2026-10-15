@@ -1,0 +1,274 @@
+// GestorDeFinanças: modelo de dados (rascunho de 14/10/2026)
+//
+// App de um usuário só, então nenhuma tabela tem usuarioId.
+// Dinheiro sempre em Decimal(12,2), nunca Float (Float erra centavos).
+// Tudo que vem do Pluggy guarda o id de lá (pluggy*Id) para a sincronização
+// diária atualizar o registro certo em vez de duplicar.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Acesso ----------
+
+// Face ID / Touch ID (WebAuthn). Uma linha por aparelho cadastrado.
+model Passkey {
+  id           String    @id @default(cuid())
+  credentialId String    @unique
+  chavePublica Bytes
+  contador     Int       @default(0)
+  aparelho     String // "iPhone", "MacBook Air"
+  criadaEm     DateTime  @default(now())
+  usadaEm      DateTime?
+}
+
+// Inscrição do web push de cada aparelho (para a notificação diária).
+model InscricaoPush {
+  id       String   @id @default(cuid())
+  endpoint String   @unique
+  p256dh   String
+  auth     String
+  aparelho String
+  criadaEm DateTime @default(now())
+}
+
+// ---------- Bancos (vindos do Pluggy) ----------
+
+// Uma conexão = um banco autorizado no Meu Pluggy (o "item" do Pluggy).
+model Conexao {
+  id             String         @id @default(cuid())
+  pluggyItemId   String         @unique
+  banco          String // "Itaú", "Bradesco", "Santander", "Sicredi"
+  status         String // status que o Pluggy devolve (UPDATED, LOGIN_ERROR...)
+  sincronizadaEm DateTime?
+  contas         Conta[]
+  investimentos  Investimento[]
+}
+
+enum TipoConta {
+  CORRENTE
+  POUPANCA
+  CARTAO_CREDITO
+}
+
+// Conta corrente, poupança ou cartão. Cartão também é "conta" no Pluggy.
+model Conta {
+  id              String       @id @default(cuid())
+  conexaoId       String
+  conexao         Conexao      @relation(fields: [conexaoId], references: [id])
+  pluggyAccountId String       @unique
+  tipo            TipoConta
+  nome            String
+  numeroFinal     String? // "4821"
+  saldo           Decimal      @db.Decimal(12, 2)
+  // só para cartão:
+  limite          Decimal?     @db.Decimal(12, 2)
+  diaFechamento   Int?
+  diaVencimento   Int?
+  lancamentos     Lancamento[]
+  faturas         Fatura[]
+}
+
+model Fatura {
+  id           String       @id @default(cuid())
+  contaId      String
+  conta        Conta        @relation(fields: [contaId], references: [id])
+  pluggyBillId String?      @unique
+  fechamento   DateTime     @db.Date
+  vencimento   DateTime     @db.Date
+  total        Decimal      @db.Decimal(12, 2)
+  paga         Boolean      @default(false)
+  lancamentos  Lancamento[]
+
+  @@index([contaId, vencimento])
+}
+
+// ---------- Movimentação ----------
+
+enum Sentido {
+  ENTRADA
+  SAIDA
+}
+
+// De onde veio a categoria de um lançamento.
+enum OrigemCategoria {
+  PLUGGY // categoria que o próprio Pluggy sugeriu
+  REGRA // uma RegraCategoria criada a partir de uma correção sua
+  MANUAL // você escolheu na mão
+}
+
+model Categoria {
+  id               String           @id @default(cuid())
+  nome             String           @unique // "Mercado", "Delivery", "Lazer"
+  sentido          Sentido
+  cor              String // hex usado nos gráficos
+  pluggyCategorias String[] // ids de categoria do Pluggy que caem aqui
+  // pagamento de fatura e transferência entre contas suas: contar entraria em dobro
+  ignorarNosTotais Boolean          @default(false)
+  lancamentos      Lancamento[]
+  regras           RegraCategoria[]
+  limite           Limite?
+  contasFixas      ContaFixa[]
+}
+
+model Lancamento {
+  id                  String           @id @default(cuid())
+  contaId             String
+  conta               Conta            @relation(fields: [contaId], references: [id])
+  pluggyTransactionId String?          @unique // vazio = lançado à mão
+  data                DateTime
+  descricao           String // como veio do banco: "PIX ENVIADO M SILVA"
+  apelido             String? // como você quer ver: "Pix para o Marcos"
+  valor               Decimal          @db.Decimal(12, 2) // sempre positivo
+  sentido             Sentido
+  categoriaId         String?
+  categoria           Categoria?       @relation(fields: [categoriaId], references: [id])
+  origemCategoria     OrigemCategoria?
+  categoriaConfirmada Boolean          @default(false) // false = mostra o "Está certo?"
+  // cartão:
+  faturaId            String?
+  fatura              Fatura?          @relation(fields: [faturaId], references: [id])
+  parcelaAtual        Int?
+  parcelasTotal       Int?
+  // se este lançamento pagou uma conta do mês:
+  contaAPagar         ContaAPagar?
+
+  @@index([data])
+  @@index([categoriaId, data])
+}
+
+// "Sempre que a descrição tiver X, é categoria Y". Nasce quando você corrige
+// uma categoria no extrato e escolhe "aplicar aos próximos".
+model RegraCategoria {
+  id          String    @id @default(cuid())
+  contem      String // trecho procurado na descrição, sem diferenciar maiúsculas
+  categoriaId String
+  categoria   Categoria @relation(fields: [categoriaId], references: [id])
+  criadaEm    DateTime  @default(now())
+}
+
+// ---------- Contas a pagar ----------
+
+// O molde: "Internet, todo dia 18, uns R$ 99,90".
+model ContaFixa {
+  id             String        @id @default(cuid())
+  nome           String
+  valorPrevisto  Decimal       @db.Decimal(12, 2)
+  diaVencimento  Int
+  formaPagamento String // "débito Bradesco", "boleto", "Pix"
+  categoriaId    String?
+  categoria      Categoria?    @relation(fields: [categoriaId], references: [id])
+  ativa          Boolean       @default(true)
+  ocorrencias    ContaAPagar[]
+}
+
+// Cada mês o molde gera uma ocorrência. Contas avulsas não têm molde.
+model ContaAPagar {
+  id           String      @id @default(cuid())
+  contaFixaId  String?
+  contaFixa    ContaFixa?  @relation(fields: [contaFixaId], references: [id])
+  nome         String
+  valor        Decimal     @db.Decimal(12, 2)
+  vencimento   DateTime    @db.Date
+  pagaEm       DateTime?
+  // o lançamento do extrato que pagou esta conta (ligado automaticamente
+  // quando valor e data batem, ou por você):
+  lancamentoId String?     @unique
+  lancamento   Lancamento? @relation(fields: [lancamentoId], references: [id])
+
+  @@unique([contaFixaId, vencimento])
+  @@index([vencimento])
+}
+
+// ---------- Planejamento ----------
+
+model Meta {
+  id        String   @id @default(cuid())
+  nome      String
+  valorAlvo Decimal  @db.Decimal(12, 2)
+  prazo     DateTime @db.Date
+  criadaEm  DateTime @default(now())
+  arquivada Boolean  @default(false)
+  aportes   Aporte[]
+}
+
+// Cada vez que você separa dinheiro para uma meta.
+model Aporte {
+  id     String   @id @default(cuid())
+  metaId String
+  meta   Meta     @relation(fields: [metaId], references: [id])
+  valor  Decimal  @db.Decimal(12, 2)
+  data   DateTime @db.Date
+}
+
+// Limite mensal por categoria (o botão "Criar limite" das sugestões).
+model Limite {
+  id          String    @id @default(cuid())
+  categoriaId String    @unique
+  categoria   Categoria @relation(fields: [categoriaId], references: [id])
+  valorMensal Decimal   @db.Decimal(12, 2)
+}
+
+// ---------- Investimentos ----------
+
+model Investimento {
+  id                 String                  @id @default(cuid())
+  conexaoId          String
+  conexao            Conexao                 @relation(fields: [conexaoId], references: [id])
+  pluggyInvestmentId String                  @unique
+  nome               String // "Tesouro Selic 2029"
+  tipo               String // tipo do Pluggy: FIXED_INCOME, TREASURE...
+  saldo              Decimal                 @db.Decimal(12, 2)
+  vencimento         DateTime?               @db.Date
+  historico          HistoricoInvestimento[]
+}
+
+// Uma foto do saldo por dia: é daqui que sai o "rendeu R$ 29,10 no mês".
+model HistoricoInvestimento {
+  id             String       @id @default(cuid())
+  investimentoId String
+  investimento   Investimento @relation(fields: [investimentoId], references: [id])
+  data           DateTime     @db.Date
+  saldo          Decimal      @db.Decimal(12, 2)
+
+  @@unique([investimentoId, data])
+}
+
+// ---------- Sugestões e rotina diária ----------
+
+enum TipoSugestao {
+  ONDE // onde economizar
+  QUANDO // quando comprar
+}
+
+enum StatusSugestao {
+  NOVA
+  ACEITA
+  IGNORADA
+}
+
+model Sugestao {
+  id            String         @id @default(cuid())
+  chave         String         @unique // ex.: "delivery-alta-2026-10", evita repetir a mesma ideia
+  tipo          TipoSugestao
+  titulo        String
+  texto         String
+  impactoMensal Decimal?       @db.Decimal(12, 2)
+  status        StatusSugestao @default(NOVA)
+  criadaEm      DateTime       @default(now())
+}
+
+// Registro de cada sincronização diária com o Pluggy (para saber se falhou).
+model Sincronizacao {
+  id          String    @id @default(cuid())
+  iniciadaEm  DateTime  @default(now())
+  terminadaEm DateTime?
+  sucesso     Boolean?
+  erro        String?
+  novos       Int       @default(0) // lançamentos novos trazidos
+}

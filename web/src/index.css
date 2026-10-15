@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* As cores e fontes das telas desenhadas no canvas */
+@theme {
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-titulo: "Space Grotesk", system-ui, sans-serif;
+
+  --color-fundo: #F3F5F4;
+  --color-tinta: #14201B;
+  --color-suave: #4F5E57;
+  --color-inativo: #5B6B64;
+  --color-borda: #DDE3E0;
+  --color-borda-forte: #C9D2CE;
+  --color-divisor: #EEF1F0;
+  --color-trilho: #E7ECEA;
+  --color-floresta: #1F6F4A;
+  --color-floresta-escura: #1F5C3E;
+  --color-floresta-clara: #E3F0E9;
+  --color-broto: #7FD1A6;
+  --color-ambar: #B86E00;
+  --color-ambar-texto: #7A4800;
+  --color-ambar-claro: #FBEFD9;
+}
+
+body {
+  background: var(--color-fundo);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
