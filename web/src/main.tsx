@@ -10,7 +10,10 @@ import { Inicio } from './telas/Inicio'
 import { Extrato } from './telas/Extrato'
 import { Cartoes } from './telas/Cartoes'
 import { Aparelhos } from './telas/Aparelhos'
-import { EmBreve } from './telas/EmBreve'
+import { Contas } from './telas/Contas'
+import { Metas } from './telas/Metas'
+import { Investimentos } from './telas/Investimentos'
+import { Sugestoes } from './telas/Sugestoes'
 
 type Estado = { logado: boolean; primeiroAcesso: boolean }
 
@@ -42,10 +45,10 @@ function App() {
           <Route index element={<Inicio />} />
           <Route path="extrato" element={<Extrato />} />
           <Route path="cartoes" element={<Cartoes />} />
-          <Route path="contas" element={<EmBreve titulo="Contas a pagar" />} />
-          <Route path="metas" element={<EmBreve titulo="Metas" />} />
-          <Route path="investimentos" element={<EmBreve titulo="Investimentos" />} />
-          <Route path="sugestoes" element={<EmBreve titulo="Sugestões" />} />
+          <Route path="contas" element={<Contas />} />
+          <Route path="metas" element={<Metas />} />
+          <Route path="investimentos" element={<Investimentos />} />
+          <Route path="sugestoes" element={<Sugestoes />} />
           <Route path="aparelhos" element={<Aparelhos aoSair={conferir} />} />
         </Route>
       </Routes>

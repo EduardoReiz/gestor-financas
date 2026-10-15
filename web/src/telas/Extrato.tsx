@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { api, useApi, type Categoria, type Lancamento, type Sentido } from '../api'
 import { Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { brl, brlComSinal, diaMes, legivel, mesAtual, nomeDoMes } from '../formatos'
@@ -10,7 +11,9 @@ export function Extrato() {
   const [busca, setBusca] = useState('')
   const [buscaAplicada, setBuscaAplicada] = useState('')
   const [sentido, setSentido] = useState<Sentido | ''>('')
-  const [categoriaId, setCategoriaId] = useState('')
+  // /extrato?categoria=<id> já abre filtrado (vem das sugestões)
+  const [parametros] = useSearchParams()
+  const [categoriaId, setCategoriaId] = useState(parametros.get('categoria') ?? '')
   const [selecionadoId, setSelecionadoId] = useState<string>()
 
   // espera parar de digitar antes de buscar

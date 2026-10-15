@@ -58,6 +58,53 @@ export interface Cartao {
   parcelamentos: { descricao: string; parcelaAtual: number; parcelasTotal: number; valor: number }[]
 }
 
+export interface ContaAPagar {
+  id: string
+  nome: string
+  valor: number
+  vencimento: string
+  pagaEm: string | null
+  formaPagamento: string | null
+  pagaAutomaticamente: boolean
+}
+
+export interface Contas {
+  total: number
+  pago: number
+  falta: number
+  aVencer: ContaAPagar[]
+  pagas: ContaAPagar[]
+}
+
+export interface Meta {
+  id: string
+  nome: string
+  alvo: number
+  guardado: number
+  guardadoNoMes: number
+  prazo: string
+  porMes: number
+  mesesRestantes: number
+  situacao: 'concluida' | 'no-ritmo' | 'atrasada'
+}
+
+export interface Investimentos {
+  total: number
+  rendeuNoMes: number
+  itens: { id: string; nome: string; banco: string; tipo: string; saldo: number; rendeuNoMes: number; fracao: number; vencimento: string | null }[]
+  dica: { texto: string } | null
+}
+
+export interface Sugestao {
+  id: string
+  tipo: 'ONDE' | 'QUANDO'
+  regra: 'alta' | 'limite' | 'assinaturas' | 'melhor'
+  titulo: string
+  texto: string
+  impactoMensal: number | null
+  categoria: { id: string; nome: string; limiteAtual: number | null } | null
+}
+
 async function pedir<T>(caminho: string, init?: RequestInit): Promise<T> {
   const resposta = await fetch(`/api${caminho}`, {
     ...init,
@@ -104,6 +151,18 @@ export const api = {
   },
   categorias: () => pedir<Categoria[]>('/categorias'),
   cartoes: () => pedir<Cartao[]>('/cartoes'),
+  contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
+  novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string }) =>
+    pedir('/contas/fixas', postar(dados)),
+  marcarConta: (id: string, paga: boolean) => pedir<void>(`/contas/${id}`, { method: 'PATCH', body: JSON.stringify({ paga }) }),
+  metas: () => pedir<{ guardadoNoMes: number; metas: Meta[] }>('/metas'),
+  novaMeta: (dados: { nome: string; valorAlvo: number; prazo: string }) => pedir('/metas', postar(dados)),
+  guardarNaMeta: (id: string, valor: number) => pedir(`/metas/${id}/aportes`, postar({ valor })),
+  investimentos: () => pedir<Investimentos>('/investimentos'),
+  sugestoes: () => pedir<Sugestao[]>('/sugestoes'),
+  responderSugestao: (id: string, status: 'ACEITA' | 'IGNORADA') =>
+    pedir<void>(`/sugestoes/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  definirLimite: (categoriaId: string, valorMensal: number) => pedir('/limites', postar({ categoriaId, valorMensal })),
   confirmarCategoria: (id: string) => pedir<void>(`/lancamentos/${id}/confirmar`, { method: 'PATCH' }),
   trocarCategoria: (
     id: string,

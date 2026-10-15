@@ -197,16 +197,7 @@ async function main() {
   await investir(itau.id, 'CDB 100% do CDI', 'FIXED_INCOME', 2000, 1982.4);
   await investir(sicredi.id, 'Poupança', 'FIXED_INCOME', 930, 924.3);
 
-  // ---------- sugestão e última sincronização ----------
-  await prisma.sugestao.create({
-    data: {
-      chave: 'delivery-alta-2026-10',
-      tipo: 'ONDE',
-      titulo: 'Delivery está acima de setembro',
-      texto: 'Os pedidos de delivery de outubro já passaram do total de setembro.',
-      impactoMensal: 110,
-    },
-  });
+  // ---------- última sincronização (as sugestões nascem do gerador) ----------
   await prisma.sincronizacao.create({
     data: { iniciadaEm: dia('2026-10-15'), terminadaEm: new Date('2026-10-15T06:00:00'), sucesso: true, novos: 3 },
   });
@@ -220,6 +211,7 @@ function round(v: number) {
 
 async function limparTudo() {
   // ordem: filhos antes dos pais
+  await prisma.sugestao.deleteMany();
   await prisma.contaAPagar.deleteMany();
   await prisma.contaFixa.deleteMany();
   await prisma.lancamento.deleteMany();
@@ -233,7 +225,6 @@ async function limparTudo() {
   await prisma.categoria.deleteMany();
   await prisma.aporte.deleteMany();
   await prisma.meta.deleteMany();
-  await prisma.sugestao.deleteMany();
   await prisma.sincronizacao.deleteMany();
 }
 

@@ -46,3 +46,12 @@ export const legivel = (texto: string) =>
         .map((p, i) => (i > 0 && minusculas.has(p) ? p : p.charAt(0).toUpperCase() + p.slice(1)))
         .join(' ')
     : texto
+
+// O que a pessoa digita ("1.234,56", "99,90", "1234.56") vira número.
+export const paraNumero = (texto: string) =>
+  Number(
+    texto
+      .replace(/\s|R\$/g, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '') // ponto de milhar
+      .replace(',', '.'),
+  )

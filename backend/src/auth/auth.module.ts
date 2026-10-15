@@ -27,9 +27,11 @@ const cookieBase: CookieOptions = {
   path: '/',
 };
 
+// Tentativas de entrar ou cadastrar: no máximo 10 por minuto.
+const Tentativas = () => Throttle({ default: { limit: 10, ttl: 60_000 } });
+
 @Controller('auth')
-@UseGuards(ThrottlerGuard)
-@Throttle({ default: { limit: 10, ttl: 60_000 } }) // no máximo 10 tentativas por minuto
+@UseGuards(ThrottlerGuard) // o resto das rotas fica no limite geral (120/min)
 class AuthController {
   constructor(private readonly auth: AuthService) {}
 
@@ -41,6 +43,7 @@ class AuthController {
 
   @Publico()
   @Post('cadastro/opcoes')
+  @Tentativas()
   async opcoesCadastro(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() corpo: PedidoCadastro) {
     const { logado } = await this.auth.estado(req.cookies?.[COOKIE_SESSAO]);
     const { opcoes, idDesafio } = await this.auth.opcoesDeCadastro(logado, corpo.codigo);
@@ -50,6 +53,7 @@ class AuthController {
 
   @Publico()
   @Post('cadastro/verificar')
+  @Tentativas()
   async verificarCadastro(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() corpo: RespostaCadastro) {
     const passkeyId = await this.auth.concluirCadastro(req.cookies?.[COOKIE_DESAFIO], corpo.resposta, corpo.aparelho);
     res.clearCookie(COOKIE_DESAFIO, cookieBase);
@@ -60,6 +64,7 @@ class AuthController {
 
   @Publico()
   @Post('entrar/opcoes')
+  @Tentativas()
   async opcoesEntrada(@Res({ passthrough: true }) res: Response) {
     const { opcoes, idDesafio } = await this.auth.opcoesDeEntrada();
     res.cookie(COOKIE_DESAFIO, idDesafio, { ...cookieBase, maxAge: 5 * 60_000 });
@@ -68,6 +73,7 @@ class AuthController {
 
   @Publico()
   @Post('entrar/verificar')
+  @Tentativas()
   async verificarEntrada(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() corpo: RespostaEntrada) {
     const passkeyId = await this.auth.concluirEntrada(req.cookies?.[COOKIE_DESAFIO], corpo.resposta);
     res.clearCookie(COOKIE_DESAFIO, cookieBase);

@@ -1,5 +1,6 @@
 import { Controller, Get, Module, Query } from '@nestjs/common';
 import { ResumoService } from './resumo.service';
+import { SugestoesModule } from '../sugestoes/sugestoes.module';
 
 @Controller('resumo')
 class ResumoController {
@@ -13,6 +14,7 @@ class ResumoController {
 }
 
 @Module({
+  imports: [SugestoesModule],
   controllers: [ResumoController],
   providers: [ResumoService],
 })

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, Sentido } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes, mesesAntes } from '../comum/mes';
+import { SugestoesService } from '../sugestoes/sugestoes.module';
 
 const num = (d: Prisma.Decimal | null | undefined) => (d ? d.toNumber() : 0);
 
@@ -11,9 +12,13 @@ const somar = (valores: (Prisma.Decimal | null | undefined)[]) =>
 
 @Injectable()
 export class ResumoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sugestoes: SugestoesService,
+  ) {}
 
   async doMes(mes?: string) {
+    await this.sugestoes.gerar();
     const intervalo = intervaloDoMes(mes);
     const hoje = new Date();
 
@@ -53,7 +58,7 @@ export class ResumoService {
             historico: { where: { data: { lt: intervalo.inicio } }, orderBy: { data: 'desc' }, take: 1 },
           },
         }),
-        this.prisma.sugestao.findFirst({ where: { status: 'NOVA' }, orderBy: { criadaEm: 'desc' } }),
+        this.prisma.sugestao.findFirst({ where: { status: 'NOVA', tipo: 'ONDE' }, orderBy: { impactoMensal: 'desc' } }),
         this.prisma.sincronizacao.findFirst({ where: { sucesso: true }, orderBy: { iniciadaEm: 'desc' } }),
       ]);
 
