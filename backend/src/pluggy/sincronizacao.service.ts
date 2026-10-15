@@ -8,6 +8,22 @@ import { traduzirCategoria } from './categorias';
 const DIA = 86_400_000;
 const soData = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
 
+// A fatura aberta é a que ainda não fechou. Sem dia de fechamento informado,
+// considera 7 dias antes do vencimento (o comum nos bancos brasileiros).
+export function cicloAberto(hoje: Date, diaVencimento: number, diaFechamento: number | null) {
+  const dia = (ano: number, mes: number, d: number) =>
+    new Date(Date.UTC(ano, mes, Math.min(d, new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate())));
+
+  for (let m = -1; m <= 2; m++) {
+    const vencimento = dia(hoje.getUTCFullYear(), hoje.getUTCMonth() + m, diaVencimento);
+    const fechamento = diaFechamento
+      ? dia(vencimento.getUTCFullYear(), vencimento.getUTCMonth() - (diaFechamento > diaVencimento ? 1 : 0), diaFechamento)
+      : new Date(vencimento.getTime() - 7 * DIA);
+    if (fechamento >= hoje) return { fechamento, vencimento };
+  }
+  throw new Error('não foi possível calcular o ciclo da fatura');
+}
+
 // PLUGGY_ITENS=itemId:Itaú,itemId:Bradesco
 // O conector MeuPluggy não diz qual é o banco, então o nome vem daqui.
 export function itensConfigurados() {
@@ -51,6 +67,7 @@ export class SincronizacaoService {
       for (const { id, banco } of itensConfigurados()) {
         novos += await this.sincronizarItem(id, banco, regras);
       }
+      await this.pareaTransferenciasEntreBancos();
       await this.prisma.sincronizacao.update({
         where: { id: registro.id },
         data: { terminadaEm: new Date(), sucesso: true, novos },
@@ -81,8 +98,9 @@ export class SincronizacaoService {
     let novos = 0;
     for (const contaPluggy of await this.pluggy.contas(itemId)) {
       const conta = await this.salvarConta(conexao.id, contaPluggy);
-      const faturaAberta = contaPluggy.subtype === 'CREDIT_CARD' ? await this.salvarFaturas(conta.id, contaPluggy) : null;
+      const faturaAberta = contaPluggy.subtype === 'CREDIT_CARD' ? await this.salvarFaturas(conta, contaPluggy) : null;
       novos += await this.salvarLancamentos(conta.id, contaPluggy.id, faturaAberta, regras);
+      if (faturaAberta) await this.recalcularFaturaAberta(faturaAberta.id);
     }
     await this.salvarInvestimentos(conexao.id, itemId);
 
@@ -93,7 +111,7 @@ export class SincronizacaoService {
     return novos;
   }
 
-  private salvarConta(conexaoId: string, c: PluggyConta) {
+  private async salvarConta(conexaoId: string, c: PluggyConta) {
     const tipo: TipoConta =
       c.subtype === 'CREDIT_CARD' ? 'CARTAO_CREDITO' : c.subtype === 'SAVINGS_ACCOUNT' ? 'POUPANCA' : 'CORRENTE';
     const cartao = c.creditData;
@@ -102,11 +120,12 @@ export class SincronizacaoService {
       tipo,
       nome: c.marketingName ?? c.name,
       numeroFinal: c.number?.replace(/\D/g, '').slice(-4) || null,
-      // no cartão o saldo é a dívida (negativa); a conta guarda o que tem
+      // no cartão o "saldo" é a dívida; quem mostra isso é a fatura
       saldo: tipo === 'CARTAO_CREDITO' ? 0 : c.balance,
-      limite: cartao?.creditLimit ?? null,
-      diaFechamento: cartao?.balanceCloseDate ? Number(cartao.balanceCloseDate.slice(8, 10)) : null,
-      diaVencimento: cartao?.balanceDueDate ? Number(cartao.balanceDueDate.slice(8, 10)) : null,
+      limite: cartao?.creditLimit || null, // alguns cartões vêm com limite 0
+      // só sobrescreve os dias quando o banco manda; senão vale o que você corrigiu
+      ...(cartao?.balanceCloseDate && { diaFechamento: Number(cartao.balanceCloseDate.slice(8, 10)) }),
+      ...(cartao?.balanceDueDate && { diaVencimento: Number(cartao.balanceDueDate.slice(8, 10)) }),
     };
     return this.prisma.conta.upsert({
       where: { pluggyAccountId: c.id },
@@ -115,24 +134,27 @@ export class SincronizacaoService {
     });
   }
 
-  // Faturas fechadas vêm de /bills; a aberta vem dos dados do próprio cartão.
-  private async salvarFaturas(contaId: string, c: PluggyConta) {
-    for (const f of await this.pluggy.faturas(c.id)) {
+  // Faturas fechadas vêm de /bills. A aberta é calculada: muitos bancos não
+  // mandam o fechamento, então ele é estimado 7 dias antes do vencimento.
+  private async salvarFaturas(conta: { id: string; diaFechamento: number | null; diaVencimento: number | null }, c: PluggyConta) {
+    const hoje = soData(new Date().toISOString());
+    const fechadas = await this.pluggy.faturas(c.id);
+    for (const f of fechadas) {
       const vencimento = soData(f.dueDate);
+      const dados = { vencimento, total: Math.abs(f.totalAmount), paga: vencimento < hoje };
       await this.prisma.fatura.upsert({
         where: { pluggyBillId: f.id },
-        // o Pluggy não manda o fechamento das antigas: ~7 dias antes do vencimento
-        create: { contaId, pluggyBillId: f.id, vencimento, fechamento: new Date(vencimento.getTime() - 7 * DIA), total: Math.abs(f.totalAmount), paga: true },
-        update: { vencimento, total: Math.abs(f.totalAmount) },
+        create: { contaId: conta.id, pluggyBillId: f.id, fechamento: new Date(vencimento.getTime() - 7 * DIA), ...dados },
+        update: dados,
       });
     }
 
-    const { balanceCloseDate, balanceDueDate } = c.creditData ?? {};
-    if (!balanceCloseDate || !balanceDueDate) return null;
+    const ultimaFechada = fechadas.map((f) => soData(f.dueDate)).sort((a, b) => b.getTime() - a.getTime())[0];
+    const diaVencimento = conta.diaVencimento ?? (ultimaFechada ? ultimaFechada.getUTCDate() : null);
+    if (!diaVencimento) return null; // sem nenhuma data: falta você informar o dia (tela Cartões)
 
+    const { fechamento, vencimento } = cicloAberto(hoje, diaVencimento, conta.diaFechamento);
     const idAberta = `aberta-${c.id}`;
-    const fechamento = soData(balanceCloseDate);
-    const vencimento = soData(balanceDueDate);
     const anterior = await this.prisma.fatura.findUnique({ where: { pluggyBillId: idAberta } });
 
     // virou o ciclo: a aberta de antes fecha e ganha um id próprio
@@ -143,10 +165,25 @@ export class SincronizacaoService {
       });
     }
 
+    // o total é recalculado depois, com as compras do ciclo
     return this.prisma.fatura.upsert({
       where: { pluggyBillId: idAberta },
-      create: { contaId, pluggyBillId: idAberta, fechamento, vencimento, total: Math.abs(c.balance), paga: false },
-      update: { fechamento, vencimento, total: Math.abs(c.balance), paga: false },
+      create: { contaId: conta.id, pluggyBillId: idAberta, fechamento, vencimento, total: 0, paga: false },
+      update: { fechamento, vencimento, paga: false },
+    });
+  }
+
+  // Total da fatura aberta = compras do ciclo menos estornos (sem contar o pagamento).
+  private async recalcularFaturaAberta(faturaId: string) {
+    const linhas = await this.prisma.lancamento.groupBy({
+      by: ['sentido'],
+      where: { faturaId, OR: [{ categoriaId: null }, { categoria: { ignorarNosTotais: false } }] },
+      _sum: { valor: true },
+    });
+    const soma = (s: Sentido) => linhas.find((l) => l.sentido === s)?._sum.valor?.toNumber() ?? 0;
+    await this.prisma.fatura.update({
+      where: { id: faturaId },
+      data: { total: Math.max(0, soma('SAIDA') - soma('ENTRADA')) },
     });
   }
 
@@ -177,7 +214,7 @@ export class SincronizacaoService {
 
     let novos = 0;
     for (const l of lancamentos) {
-      const sentido: Sentido = l.amount < 0 ? 'SAIDA' : 'ENTRADA';
+      const sentido: Sentido = l.type === 'DEBIT' ? 'SAIDA' : 'ENTRADA';
       const data = new Date(l.date);
       const meta = l.creditCardMetadata;
 
@@ -238,6 +275,50 @@ export class SincronizacaoService {
       update: {},
     });
     return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: true };
+  }
+
+  // Pix do Sicredi para o Bradesco aparece como saída num banco e entrada no
+  // outro. Nem sempre o Pluggy reconhece que é a mesma pessoa, e aí entrava em
+  // dobro nos totais. Mesmo valor, bancos diferentes, até 2 dias: é a mesma
+  // transferência. Não mexe no que você categorizou na mão.
+  private async pareaTransferenciasEntreBancos() {
+    const candidatos = await this.prisma.lancamento.findMany({
+      where: {
+        conta: { tipo: { not: 'CARTAO_CREDITO' } },
+        OR: [{ origemCategoria: null }, { origemCategoria: { not: 'MANUAL' } }],
+      },
+      select: { id: true, data: true, valor: true, sentido: true, conta: { select: { conexaoId: true } } },
+      orderBy: { data: 'asc' },
+    });
+
+    const entradas = candidatos.filter((l) => l.sentido === 'ENTRADA');
+    const usados = new Set<string>();
+    const pares: string[] = [];
+
+    for (const saida of candidatos.filter((l) => l.sentido === 'SAIDA')) {
+      const par = entradas.find(
+        (e) =>
+          !usados.has(e.id) &&
+          e.conta.conexaoId !== saida.conta.conexaoId &&
+          e.valor.equals(saida.valor) &&
+          Math.abs(e.data.getTime() - saida.data.getTime()) <= 2 * DIA,
+      );
+      if (!par) continue;
+      usados.add(par.id);
+      pares.push(saida.id, par.id);
+    }
+    if (pares.length === 0) return;
+
+    const entreContas = await this.prisma.categoria.upsert({
+      where: { nome: 'Entre contas suas' },
+      create: { nome: 'Entre contas suas', sentido: 'SAIDA', cor: '#C9D2CE', ignorarNosTotais: true },
+      update: {},
+    });
+    await this.prisma.lancamento.updateMany({
+      where: { id: { in: pares } },
+      data: { categoriaId: entreContas.id, origemCategoria: 'REGRA', categoriaConfirmada: true },
+    });
+    this.log.log(`${pares.length / 2} transferências entre seus bancos marcadas`);
   }
 
   private async salvarInvestimentos(conexaoId: string, itemId: string) {

@@ -27,7 +27,10 @@ export interface PluggyLancamento {
   id: string;
   date: string;
   description: string;
-  amount: number; // negativo = saiu dinheiro (na conta e no cartão)
+  // O sinal do amount NÃO é confiável: no cartão real a compra vem positiva
+  // (no sandbox, negativa). O type é: DEBIT = saiu dinheiro, CREDIT = entrou.
+  amount: number;
+  type: 'DEBIT' | 'CREDIT';
   categoryId: string | null;
   status: 'POSTED' | 'PENDING';
   creditCardMetadata: {
