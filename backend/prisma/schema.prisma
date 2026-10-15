@@ -180,6 +180,9 @@ model ContaFixa {
   formaPagamento String // "débito Bradesco", "boleto", "Pix"
   // quem recebe o Pix desta conta: se um código novo vier com outro nome, o app avisa
   recebedor      String?
+  // trecho da descrição no extrato ("EQUATORIAL"): acha o pagamento mesmo
+  // quando o valor muda de um mês para o outro
+  contem         String?
   categoriaId    String?
   categoria      Categoria?    @relation(fields: [categoriaId], references: [id])
   ativa          Boolean       @default(true)

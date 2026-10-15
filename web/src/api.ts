@@ -182,7 +182,7 @@ export const api = {
   categorias: () => pedir<Categoria[]>('/categorias'),
   cartoes: () => pedir<Cartao[]>('/cartoes'),
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
-  novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string }) =>
+  novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string; contem?: string }) =>
     pedir('/contas/fixas', postar(dados)),
   contasFixas: () => pedir<{ id: string; nome: string; diaVencimento: number; recebedor: string | null }[]>('/contas/fixas'),
   cobrancas: () => pedir<Cobranca[]>('/cobrancas'),

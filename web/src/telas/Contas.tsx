@@ -160,6 +160,7 @@ function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
   const [valor, setValor] = useState('')
   const [dia, setDia] = useState('10')
   const [forma, setForma] = useState('Pix')
+  const [contem, setContem] = useState('')
   const [erro, setErro] = useState<string>()
 
   async function salvar(e: React.FormEvent) {
@@ -186,6 +187,13 @@ function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
       <Campo rotulo="Valor (R$)" valor={valor} aoMudar={setValor} placeholder="99,90" inputMode="decimal" />
       <Campo rotulo="Dia do vencimento" valor={dia} aoMudar={setDia} inputMode="numeric" />
       <Campo rotulo="Como paga" valor={forma} aoMudar={setForma} placeholder="Pix, boleto, débito..." />
+      <Campo
+        rotulo="Como aparece no extrato (opcional)"
+        valor={contem}
+        aoMudar={setContem}
+        placeholder="Ex.: EQUATORIAL"
+        className="sm:col-span-2 lg:col-span-5"
+      />
       <button className={`${botaoPrincipal} sm:col-span-2 lg:col-span-5`} disabled={!nome.trim() || !(paraNumero(valor) > 0)}>
         Salvar conta fixa
       </button>

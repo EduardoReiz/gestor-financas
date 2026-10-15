@@ -10,14 +10,19 @@ class NovaContaFixa {
   @Type(() => Number) @IsInt() @Min(1) @Max(31) diaVencimento!: number;
   @IsString() @MaxLength(40) formaPagamento!: string;
   @IsOptional() @IsString() categoriaId?: string;
+  @IsOptional() @IsString() @MaxLength(40) contem?: string;
 }
 
 class MarcarPaga {
   @IsBoolean() paga!: boolean;
 }
 
-// Um débito com o mesmo valor até 3 dias antes ou depois do vencimento é o pagamento.
+// Como achar o pagamento no extrato:
+//  - conta com "contem": débito com esse nome até 10 dias antes/depois, de
+//    valor mais próximo (conta de luz muda de valor; a Claro tem duas linhas);
+//  - sem "contem": débito com o mesmo valor até 3 dias antes/depois.
 const FOLGA_DIAS = 3;
+const FOLGA_COM_NOME_DIAS = 10;
 
 @Injectable()
 class ContasService {
@@ -59,7 +64,7 @@ class ContasService {
   fixas() {
     return this.prisma.contaFixa.findMany({
       where: { ativa: true },
-      select: { id: true, nome: true, diaVencimento: true, recebedor: true },
+      select: { id: true, nome: true, diaVencimento: true, recebedor: true, contem: true },
       orderBy: { nome: 'asc' },
     });
   }
@@ -102,19 +107,30 @@ class ContasService {
   private async ligarPagamentos(inicio: Date, fim: Date) {
     const pendentes = await this.prisma.contaAPagar.findMany({
       where: { pagaEm: null, vencimento: { gte: inicio, lt: fim } },
+      include: { contaFixa: { select: { contem: true } } },
     });
 
     for (const conta of pendentes) {
-      const de = new Date(conta.vencimento.getTime() - FOLGA_DIAS * 86_400_000);
-      const ate = new Date(conta.vencimento.getTime() + (FOLGA_DIAS + 1) * 86_400_000);
-      const pagamento = await this.prisma.lancamento.findFirst({
-        where: { sentido: 'SAIDA', valor: conta.valor, data: { gte: de, lt: ate }, contaAPagar: null },
-        orderBy: { data: 'asc' },
+      const contem = conta.contaFixa?.contem?.trim();
+      const folga = (contem ? FOLGA_COM_NOME_DIAS : FOLGA_DIAS) * 86_400_000;
+      const candidatos = await this.prisma.lancamento.findMany({
+        where: {
+          sentido: 'SAIDA',
+          data: { gte: new Date(conta.vencimento.getTime() - folga), lt: new Date(conta.vencimento.getTime() + folga + 86_400_000) },
+          contaAPagar: null,
+          ...(contem ? { descricao: { contains: contem, mode: 'insensitive' } } : { valor: conta.valor }),
+        },
       });
+      const alvo = conta.valor.toNumber();
+      const pagamento = candidatos.sort(
+        (a, b) => Math.abs(a.valor.toNumber() - alvo) - Math.abs(b.valor.toNumber() - alvo) || a.data.getTime() - b.data.getTime(),
+      )[0];
+
       if (pagamento) {
         await this.prisma.contaAPagar.update({
           where: { id: conta.id },
-          data: { pagaEm: pagamento.data, lancamentoId: pagamento.id },
+          // o valor da conta passa a ser o que foi pago de verdade
+          data: { pagaEm: pagamento.data, lancamentoId: pagamento.id, valor: pagamento.valor },
         });
       }
     }
