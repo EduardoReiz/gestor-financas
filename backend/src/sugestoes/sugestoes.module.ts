@@ -23,6 +23,8 @@ interface Ideia {
 }
 
 const DIA = 86_400_000;
+// descrições que os bancos usam para cobrança de atraso
+const ENCARGO = /JUROS|MULTA|ENCARGO|MORA\b|ATRASO|ROTATIV/i;
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const ddmm = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
 const centavos = (v: number) => Math.round(v * 100) / 100;
@@ -36,6 +38,7 @@ export class SugestoesService {
   // aceitou ou ignorou continuam como estão: a chave impede repetir.
   async gerar(hoje = new Date()) {
     const ideias = [
+      ...(await this.jurosEAtraso(hoje)),
       ...(await this.categoriasEmAlta(hoje)),
       ...(await this.limitesEstourados(hoje)),
       ...(await this.assinaturas(hoje)),
@@ -91,6 +94,32 @@ export class SugestoesService {
   }
 
   // ---------- as regras ----------
+
+  // Juros, multa, encargos ou IOF de atraso em qualquer conta ou cartão.
+  // Pouco dinheiro, mas é sinal de conta esquecida (e atraso pesa no score).
+  private async jurosEAtraso(hoje: Date): Promise<Ideia[]> {
+    const encargos = await this.prisma.lancamento.findMany({
+      where: { sentido: 'SAIDA', data: { gte: new Date(hoje.getTime() - 45 * DIA) } },
+      select: { descricao: true, valor: true, data: true, conta: { select: { id: true, nome: true, conexao: { select: { banco: true } } } } },
+    });
+    const porConta = new Map<string, { nome: string; total: number; ultimo: Date }>();
+    for (const l of encargos.filter((e) => ENCARGO.test(e.descricao))) {
+      const atual = porConta.get(l.conta.id) ?? { nome: `${l.conta.conexao.banco} · ${l.conta.nome}`, total: 0, ultimo: l.data };
+      atual.total += l.valor.toNumber();
+      if (l.data > atual.ultimo) atual.ultimo = l.data;
+      porConta.set(l.conta.id, atual);
+    }
+
+    return [...porConta].map(([contaId, { nome, total, ultimo }]) => ({
+      chave: `atraso-${contaId}-${chaveMes(ultimo)}`,
+      tipo: 'ONDE' as const,
+      titulo: `Cobrança de atraso: ${nome}`,
+      texto:
+        `${brl(total)} em juros, multa ou IOF de atraso (último em ${ddmm(ultimo)}). ` +
+        'Pague o saldo devedor atualizado no app do banco e veja se não há alguma cobrança recorrente esquecida.',
+      impactoMensal: centavos(total),
+    }));
+  }
 
   // Categoria que, no meio do mês, já passou do mês anterior inteiro (+10%, +R$ 30).
   private async categoriasEmAlta(hoje: Date): Promise<Ideia[]> {

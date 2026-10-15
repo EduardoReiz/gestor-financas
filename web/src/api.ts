@@ -66,6 +66,28 @@ export interface ContaAPagar {
   pagaEm: string | null
   formaPagamento: string | null
   pagaAutomaticamente: boolean
+  temCodigo: boolean
+}
+
+export interface Cobranca {
+  id: string
+  tipo: 'PIX' | 'BOLETO' | 'CONCESSIONARIA'
+  codigo: string
+  titulo: string
+  recebedor: string | null
+  valor: number | null
+  vencimento: string | null
+  pagaEm: string | null
+  pagaAutomaticamente: boolean
+}
+
+export interface CodigoConferido {
+  tipo: Cobranca['tipo']
+  codigo: string
+  valor: number | null
+  vencimento?: string | null
+  recebedor?: string | null
+  contaFixaSugerida: string | null
 }
 
 export interface Contas {
@@ -162,6 +184,13 @@ export const api = {
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
   novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string }) =>
     pedir('/contas/fixas', postar(dados)),
+  contasFixas: () => pedir<{ id: string; nome: string; diaVencimento: number; recebedor: string | null }[]>('/contas/fixas'),
+  cobrancas: () => pedir<Cobranca[]>('/cobrancas'),
+  conferirCodigo: (codigo: string) => pedir<CodigoConferido>('/cobrancas/conferir', postar({ codigo })),
+  novaCobranca: (dados: { codigo: string; descricao?: string; contaFixaId?: string }) =>
+    pedir<{ id: string; aviso: string | null }>('/cobrancas', postar(dados)),
+  marcarCobranca: (id: string, paga: boolean) => pedir<void>(`/cobrancas/${id}`, { method: 'PATCH', body: JSON.stringify({ paga }) }),
+  removerCobranca: (id: string) => pedir<void>(`/cobrancas/${id}`, { method: 'DELETE' }),
   marcarConta: (id: string, paga: boolean) => pedir<void>(`/contas/${id}`, { method: 'PATCH', body: JSON.stringify({ paga }) }),
   metas: () => pedir<{ guardadoNoMes: number; metas: Meta[] }>('/metas'),
   novaMeta: (dados: { nome: string; valorAlvo: number; prazo: string }) => pedir('/metas', postar(dados)),

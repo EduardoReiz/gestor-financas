@@ -30,7 +30,7 @@ class ContasService {
 
     const contas = await this.prisma.contaAPagar.findMany({
       where: { vencimento: { gte: intervalo.inicio, lt: intervalo.fim } },
-      include: { contaFixa: { select: { formaPagamento: true } } },
+      include: { contaFixa: { select: { formaPagamento: true } }, cobranca: { select: { id: true } } },
       orderBy: { vencimento: 'asc' },
     });
 
@@ -44,6 +44,7 @@ class ContasService {
       pagaEm: c.pagaEm,
       formaPagamento: c.contaFixa?.formaPagamento ?? null,
       pagaAutomaticamente: !!c.lancamentoId,
+      temCodigo: !!c.cobranca,
     });
 
     return {
@@ -53,6 +54,14 @@ class ContasService {
       aVencer: contas.filter((c) => !c.pagaEm).map(comoItem),
       pagas: contas.filter((c) => c.pagaEm).map(comoItem),
     };
+  }
+
+  fixas() {
+    return this.prisma.contaFixa.findMany({
+      where: { ativa: true },
+      select: { id: true, nome: true, diaVencimento: true, recebedor: true },
+      orderBy: { nome: 'asc' },
+    });
   }
 
   async criarFixa(dados: NovaContaFixa) {
@@ -125,6 +134,11 @@ class ContasController {
   @Get()
   doMes(@Query() filtro: FiltroMes) {
     return this.contas.doMes(filtro.mes);
+  }
+
+  @Get('fixas')
+  fixas() {
+    return this.contas.fixas();
   }
 
   @Post('fixas')

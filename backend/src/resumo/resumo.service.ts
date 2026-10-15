@@ -58,7 +58,10 @@ export class ResumoService {
             historico: { where: { data: { lt: intervalo.inicio } }, orderBy: { data: 'desc' }, take: 1 },
           },
         }),
-        this.prisma.sugestao.findFirst({ where: { status: 'NOVA', tipo: 'ONDE' }, orderBy: { impactoMensal: 'desc' } }),
+        this.prisma.sugestao
+          .findMany({ where: { status: 'NOVA', tipo: 'ONDE' }, orderBy: { impactoMensal: 'desc' } })
+          // atraso primeiro, mesmo que valha pouco: é o que dói no score
+          .then((s) => s.find((x) => x.chave.startsWith('atraso-')) ?? s[0] ?? null),
         this.prisma.sincronizacao.findFirst({ where: { sucesso: true }, orderBy: { iniciadaEm: 'desc' } }),
       ]);
 

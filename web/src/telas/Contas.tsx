@@ -3,54 +3,98 @@ import { api, useApi, type ContaAPagar } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { BotaoAdicionar, Campo, botaoPrincipal } from '../componentes/Formulario'
 import { brl, diaMes, diasAte, mesAtual, nomeDoMes, paraNumero } from '../formatos'
+import { useSearchParams } from 'react-router'
+import { Codigos } from './Codigos'
 
 export function Contas() {
   const [mes] = useState(mesAtual)
   const { dados, erro, recarregar } = useApi(() => api.contas(mes), [mes])
   const [criando, setCriando] = useState(false)
+  // /contas?aba=codigos abre direto nos códigos (vem do aviso no Início)
+  const [parametros, setParametros] = useSearchParams()
+  const aba = parametros.get('aba') === 'codigos' ? 'codigos' : 'mes'
+  const irPara = (nova: 'mes' | 'codigos') => setParametros(nova === 'codigos' ? { aba: 'codigos' } : {})
+  const comCodigo = dados?.aVencer.filter((c) => c.temCodigo).length ?? 0
 
   return (
     <>
       <Cabecalho sobre={nomeDoMes(mes)} titulo="Contas a pagar">
-        <BotaoAdicionar rotulo="Adicionar conta fixa" aberto={criando} aoAlternar={() => setCriando(!criando)} />
+        {aba === 'mes' && <BotaoAdicionar rotulo="Adicionar conta fixa" aberto={criando} aoAlternar={() => setCriando(!criando)} />}
       </Cabecalho>
 
-      {criando && (
-        <NovaConta
-          aoSalvar={() => {
-            setCriando(false)
-            recarregar()
-          }}
-        />
-      )}
+      <div role="tablist" aria-label="Contas a pagar" className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[#E3E8E6] p-1 lg:max-w-md">
+        {(
+          [
+            ['mes', 'Contas do mês'],
+            ['codigos', 'Códigos para pagar'],
+          ] as const
+        ).map(([valor, nome]) => (
+          <button
+            key={valor}
+            role="tab"
+            aria-selected={aba === valor}
+            onClick={() => irPara(valor)}
+            className={`h-10 rounded-[9px] text-sm ${aba === valor ? 'bg-white font-semibold' : 'text-suave'}`}
+          >
+            {nome}
+          </button>
+        ))}
+      </div>
 
-      {!dados ? (
-        <Carregando erro={erro} />
+      {aba === 'codigos' ? (
+        <Codigos aoMudar={recarregar} />
       ) : (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-          <Cartao className="flex flex-col gap-2 p-4 lg:order-last lg:w-80 lg:p-5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm text-suave">Ainda falta pagar</span>
-              <span className="font-titulo text-[22px] font-bold">{brl(dados.falta)}</span>
-            </div>
-            <Barra fracao={dados.total ? dados.pago / dados.total : 0} />
-            <span className="text-[13px] text-suave">
-              {brl(dados.pago)} já pagos de {brl(dados.total)} em contas do mês
-            </span>
-          </Cartao>
+        <>
+          {criando && (
+            <NovaConta
+              aoSalvar={() => {
+                setCriando(false)
+                recarregar()
+              }}
+            />
+          )}
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <Lista titulo="A vencer" contas={dados.aVencer} aoMudar={recarregar} vazio="Tudo pago neste mês." />
-            {dados.pagas.length > 0 && <Lista titulo="Pagas" contas={dados.pagas} aoMudar={recarregar} />}
-          </div>
-        </div>
+          {!dados ? (
+            <Carregando erro={erro} />
+          ) : (
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+              <Cartao className="flex flex-col gap-2 p-4 lg:order-last lg:w-80 lg:p-5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm text-suave">Ainda falta pagar</span>
+                  <span className="font-titulo text-[22px] font-bold">{brl(dados.falta)}</span>
+                </div>
+                <Barra fracao={dados.total ? dados.pago / dados.total : 0} />
+                <span className="text-[13px] text-suave">
+                  {brl(dados.pago)} já pagos de {brl(dados.total)} em contas do mês
+                </span>
+              </Cartao>
+
+              <div className="flex min-w-0 flex-1 flex-col gap-4">
+                {comCodigo > 0 && (
+                  <button
+                    onClick={() => irPara('codigos')}
+                    className="rounded-xl bg-floresta-clara px-4 py-3 text-left text-sm text-floresta-escura"
+                  >
+                    {comCodigo === 1 ? '1 conta já tem' : `${comCodigo} contas já têm`} o Pix ou boleto guardado. <b>Ver códigos</b>
+                  </button>
+                )}
+                <Lista titulo="A vencer" contas={dados.aVencer} aoMudar={recarregar} vazio="Tudo pago neste mês." />
+                {dados.pagas.length > 0 && <Lista titulo="Pagas" contas={dados.pagas} aoMudar={recarregar} />}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </>
   )
 }
 
 function prazo(dias: number) {
-  if (dias < 0) return { texto: `atrasada ${-dias} ${dias === -1 ? 'dia' : 'dias'}`, perto: true }
+  if (dias < 0)
+    return {
+      texto: `atrasada ${-dias} ${dias === -1 ? 'dia' : 'dias'}`,
+      perto: true,
+    }
   if (dias === 0) return { texto: 'vence hoje', perto: true }
   if (dias === 1) return { texto: 'amanhã', perto: true }
   return { texto: `em ${dias} dias`, perto: dias <= 7 }
@@ -76,7 +120,14 @@ function Lista({ titulo, contas, aoMudar, vazio }: { titulo: string; contas: Con
                   onChange={() => api.marcarConta(c.id, !paga).then(aoMudar)}
                 />
                 <span className="flex min-w-0 flex-col">
-                  <span className={`text-[15px] ${paga ? '' : 'font-medium'}`}>{c.nome}</span>
+                  <span className={`text-[15px] ${paga ? '' : 'font-medium'}`}>
+                    {c.nome}
+                    {c.temCodigo && !paga && (
+                      <span className="ml-2 rounded-md bg-floresta-clara px-1.5 py-0.5 text-[11px] font-semibold text-floresta-escura">
+                        código
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[13px] text-suave">
                     {paga
                       ? `pago em ${diaMes(c.pagaEm!)}${c.pagaAutomaticamente ? ' · achado no extrato' : ''}`
@@ -114,7 +165,12 @@ function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
   async function salvar(e: React.FormEvent) {
     e.preventDefault()
     try {
-      await api.novaContaFixa({ nome, valorPrevisto: paraNumero(valor), diaVencimento: Number(dia), formaPagamento: forma })
+      await api.novaContaFixa({
+        nome,
+        valorPrevisto: paraNumero(valor),
+        diaVencimento: Number(dia),
+        formaPagamento: forma,
+      })
       aoSalvar()
     } catch (e) {
       setErro((e as Error).message)
@@ -122,7 +178,10 @@ function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
   }
 
   return (
-    <form onSubmit={salvar} className="mb-4 grid gap-3 rounded-2xl border border-borda bg-white p-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+    <form
+      onSubmit={salvar}
+      className="mb-4 grid gap-3 rounded-2xl border border-borda bg-white p-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-end"
+    >
       <Campo rotulo="Nome" valor={nome} aoMudar={setNome} placeholder="Ex.: Internet" className="lg:col-span-2" />
       <Campo rotulo="Valor (R$)" valor={valor} aoMudar={setValor} placeholder="99,90" inputMode="decimal" />
       <Campo rotulo="Dia do vencimento" valor={dia} aoMudar={setDia} inputMode="numeric" />
@@ -130,7 +189,11 @@ function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
       <button className={`${botaoPrincipal} sm:col-span-2 lg:col-span-5`} disabled={!nome.trim() || !(paraNumero(valor) > 0)}>
         Salvar conta fixa
       </button>
-      {erro && <p role="alert" className="text-sm text-ambar-texto sm:col-span-2 lg:col-span-5">{erro}</p>}
+      {erro && (
+        <p role="alert" className="text-sm text-ambar-texto sm:col-span-2 lg:col-span-5">
+          {erro}
+        </p>
+      )}
     </form>
   )
 }

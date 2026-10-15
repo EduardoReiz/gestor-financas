@@ -153,6 +153,7 @@ model Lancamento {
   parcelasTotal       Int?
   // se este lançamento pagou uma conta do mês:
   contaAPagar         ContaAPagar?
+  cobranca            Cobranca?
 
   @@index([data])
   @@index([categoriaId, data])
@@ -177,10 +178,13 @@ model ContaFixa {
   valorPrevisto  Decimal       @db.Decimal(12, 2)
   diaVencimento  Int
   formaPagamento String // "débito Bradesco", "boleto", "Pix"
+  // quem recebe o Pix desta conta: se um código novo vier com outro nome, o app avisa
+  recebedor      String?
   categoriaId    String?
   categoria      Categoria?    @relation(fields: [categoriaId], references: [id])
   ativa          Boolean       @default(true)
   ocorrencias    ContaAPagar[]
+  cobrancas      Cobranca[]
 }
 
 // Cada mês o molde gera uma ocorrência. Contas avulsas não têm molde.
@@ -196,9 +200,38 @@ model ContaAPagar {
   // quando valor e data batem, ou por você):
   lancamentoId String?     @unique
   lancamento   Lancamento? @relation(fields: [lancamentoId], references: [id])
+  cobranca     Cobranca?
 
   @@unique([contaFixaId, vencimento])
   @@index([vencimento])
+}
+
+enum TipoCobranca {
+  PIX
+  BOLETO
+  CONCESSIONARIA
+}
+
+// Um código para pagar: Pix copia e cola ou linha digitável de boleto.
+// Valor, vencimento e recebedor saem do próprio código (src/cobrancas/codigos.ts).
+model Cobranca {
+  id            String       @id @default(cuid())
+  tipo          TipoCobranca
+  codigo        String       @unique
+  descricao     String? // "Claro", "Energia de outubro"...
+  valor         Decimal?     @db.Decimal(12, 2)
+  vencimento    DateTime?    @db.Date
+  recebedor     String? // nome que vem no Pix
+  contaFixaId   String?
+  contaFixa     ContaFixa?   @relation(fields: [contaFixaId], references: [id])
+  contaAPagarId String?      @unique
+  contaAPagar   ContaAPagar? @relation(fields: [contaAPagarId], references: [id])
+  pagaEm        DateTime?
+  lancamentoId  String?      @unique
+  lancamento    Lancamento?  @relation(fields: [lancamentoId], references: [id])
+  criadaEm      DateTime     @default(now())
+
+  @@index([pagaEm])
 }
 
 // ---------- Planejamento ----------

@@ -11,6 +11,7 @@ import { MetasModule } from './metas/metas.module';
 import { InvestimentosModule } from './investimentos/investimentos.module';
 import { SugestoesModule } from './sugestoes/sugestoes.module';
 import { PluggyModule } from './pluggy/pluggy.module';
+import { CobrancasModule } from './cobrancas/cobrancas.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PluggyModule } from './pluggy/pluggy.module';
     InvestimentosModule,
     SugestoesModule,
     PluggyModule,
+    CobrancasModule,
   ],
 })
 export class AppModule {}
