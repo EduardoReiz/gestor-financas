@@ -9,7 +9,7 @@ import { Entrar } from './telas/Entrar'
 import { Inicio } from './telas/Inicio'
 import { Extrato } from './telas/Extrato'
 import { Cartoes } from './telas/Cartoes'
-import { Aparelhos } from './telas/Aparelhos'
+import { Ajustes } from './telas/Ajustes'
 import { Contas } from './telas/Contas'
 import { Metas } from './telas/Metas'
 import { Investimentos } from './telas/Investimentos'
@@ -49,7 +49,7 @@ function App() {
           <Route path="metas" element={<Metas />} />
           <Route path="investimentos" element={<Investimentos />} />
           <Route path="sugestoes" element={<Sugestoes />} />
-          <Route path="aparelhos" element={<Aparelhos aoSair={conferir} />} />
+          <Route path="ajustes" element={<Ajustes aoSair={conferir} />} />
         </Route>
       </Routes>
     </BrowserRouter>

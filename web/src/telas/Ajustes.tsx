@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { startRegistration } from '@simplewebauthn/browser'
-import { auth, useApi } from '../api'
+import { api, auth, useApi } from '../api'
 import { Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { mensagemDeErro, nomeDoAparelho } from './Entrar'
 
 const data = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-export function Aparelhos({ aoSair }: { aoSair: () => void }) {
+export function Ajustes({ aoSair }: { aoSair: () => void }) {
   const { dados: aparelhos, erro, recarregar } = useApi(auth.aparelhos, [])
   const [nome, setNome] = useState(nomeDoAparelho)
   const [aviso, setAviso] = useState<string>()
@@ -35,7 +35,7 @@ export function Aparelhos({ aoSair }: { aoSair: () => void }) {
 
   return (
     <>
-      <Cabecalho sobre="Quem pode entrar no app" titulo="Aparelhos">
+      <Cabecalho sobre="Bancos e aparelhos" titulo="Ajustes">
         <button
           className="h-11 rounded-xl border border-borda-forte bg-white px-4 text-sm font-medium"
           onClick={() => auth.sair().finally(aoSair)}
@@ -45,6 +45,9 @@ export function Aparelhos({ aoSair }: { aoSair: () => void }) {
       </Cabecalho>
 
       <div className="flex max-w-2xl flex-col gap-4">
+        <Bancos />
+
+        <h2 className="mt-2 text-[13px] font-semibold text-suave">Aparelhos que podem entrar</h2>
         {!aparelhos ? (
           <Carregando erro={erro} />
         ) : (
@@ -85,5 +88,54 @@ export function Aparelhos({ aoSair }: { aoSair: () => void }) {
         </Cartao>
       </div>
     </>
+  )
+}
+
+function Bancos() {
+  const { dados, erro, recarregar } = useApi(api.sincronizacao, [])
+  const [rodando, setRodando] = useState(false)
+  const [aviso, setAviso] = useState<string>()
+
+  async function sincronizar() {
+    setRodando(true)
+    setAviso(undefined)
+    try {
+      const r = await api.sincronizar()
+      setAviso(r.jaEstavaRodando ? 'Já estava sincronizando.' : `Pronto: ${r.novos} lançamentos novos.`)
+    } catch (e) {
+      setAviso(mensagemDeErro(e))
+    } finally {
+      setRodando(false)
+      recarregar()
+    }
+  }
+
+  if (!dados) return <Carregando erro={erro} />
+  const ultima = dados.ultima
+
+  return (
+    <Cartao className="flex flex-col gap-3 p-4">
+      <h2 className="text-base font-semibold">Bancos (Open Finance)</h2>
+      {!dados.configurado ? (
+        <p className="text-sm text-suave">
+          Nenhum banco conectado ainda. Coloque as chaves do Pluggy e os Item IDs em <code>PLUGGY_ITENS</code> no .env do servidor.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm">{dados.bancos.join(' · ')}</p>
+          {ultima && (
+            <p className={`text-sm ${ultima.sucesso === false ? 'text-ambar-texto' : 'text-suave'}`}>
+              {ultima.sucesso === false
+                ? `A última sincronização falhou (${data(ultima.quando)}): ${ultima.erro}`
+                : `Última sincronização: ${new Date(ultima.quando).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}. Roda sozinha todo dia às 06:00.`}
+            </p>
+          )}
+          <button className="h-11.5 rounded-xl bg-floresta text-[15px] font-semibold text-white disabled:opacity-60" disabled={rodando} onClick={sincronizar}>
+            {rodando ? 'Sincronizando…' : 'Sincronizar agora'}
+          </button>
+          {aviso && <p role="status" className="text-sm text-floresta-escura">{aviso}</p>}
+        </>
+      )}
+    </Cartao>
   )
 }

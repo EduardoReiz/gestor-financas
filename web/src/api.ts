@@ -141,7 +141,15 @@ export const auth = {
   removerAparelho: (id: string) => pedir<void>(`/auth/aparelhos/${id}`, { method: 'DELETE' }),
 }
 
+export interface EstadoSincronizacao {
+  configurado: boolean
+  bancos: string[]
+  ultima: { quando: string; sucesso: boolean | null; erro: string | null; novos: number } | null
+}
+
 export const api = {
+  sincronizacao: () => pedir<EstadoSincronizacao>('/sincronizacao'),
+  sincronizar: () => pedir<{ novos?: number; jaEstavaRodando?: boolean }>('/sincronizacao', { method: 'POST' }),
   resumo: (mes: string) => pedir<Resumo>(`/resumo?mes=${mes}`),
   lancamentos: (filtro: Record<string, string | undefined>) => {
     const params = new URLSearchParams(
