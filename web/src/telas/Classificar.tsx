@@ -139,7 +139,10 @@ function ItemGasto({
     <article className={`flex flex-col gap-3 rounded-2xl border border-borda bg-white p-4 ${ocupado ? 'opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <span className="flex min-w-0 flex-col">
-          <span className="truncate text-[15px] font-medium">{legivel(l.descricao)}</span>
+          <span className="truncate text-[15px] font-medium">
+            {/* o nome do lugar, sem o código do banco; o apelido que você deu tem prioridade */}
+            {l.descricao !== l.descricaoOriginal ? l.descricao : legivel(lugar)}
+          </span>
           <span className="text-[13px] text-suave">
             {diaMes(l.data)} · {l.conta.tipo === 'CARTAO_CREDITO' ? 'cartão' : 'conta'} {l.conta.banco}
           </span>
