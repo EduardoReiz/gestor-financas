@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
@@ -11,6 +12,29 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.setGlobalPrefix('api');
+  app.disable('x-powered-by');
+  // Cabeçalhos de segurança: a página só carrega o que vem dela mesma
+  // (mais as fontes do Google). Um script injetado não roda nem manda dados para fora.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'wasm-unsafe-eval'"], // wasm: o leitor de PDF
+          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          imgSrc: ["'self'", 'data:', 'blob:'], // blob: a foto do boleto antes de ler o QR
+          workerSrc: ["'self'", 'blob:'],
+          connectSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+        },
+      },
+      strictTransportSecurity: process.env.NODE_ENV === 'production' ? { maxAge: 31536000 } : false,
+    }),
+  );
   app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({ origin: process.env.ORIGEM_WEB ?? 'http://localhost:5173' });
