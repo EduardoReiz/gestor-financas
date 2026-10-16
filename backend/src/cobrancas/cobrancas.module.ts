@@ -4,6 +4,8 @@ import {
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.module';
 import { CodigoInvalido, lerCodigo } from './codigos';
+import { PermiteEnvio, UsuarioAtual } from '../auth/auth.guard';
+import type { Usuario } from '../auth/auth.service';
 
 class NovaCobranca {
   @IsString() @MaxLength(2000) codigo!: string;
@@ -31,7 +33,9 @@ class CobrancasService {
     return { ...lido, contaFixaSugerida: anterior?.contaFixaId ?? null };
   }
 
-  async criar(dados: NovaCobranca) {
+  async criar(dados: NovaCobranca, usuario: Usuario) {
+    // quem só envia não escolhe conta fixa (nem enxerga as suas)
+    if (usuario.papel !== 'DONO') dados.contaFixaId = undefined;
     const lido = this.ler(dados.codigo);
     if (await this.prisma.cobranca.findUnique({ where: { codigo: lido.codigo } })) {
       throw new ConflictException('Esse código já está na lista.');
@@ -63,6 +67,7 @@ class CobrancasService {
         recebedor,
         contaFixaId: dados.contaFixaId ?? null,
         contaAPagarId,
+        enviadaPorId: usuario.papel === 'DONO' ? null : usuario.passkeyId,
       },
     });
     // só guarda o primeiro nome visto: um recebedor diferente continua gerando aviso
@@ -79,6 +84,7 @@ class CobrancasService {
       include: {
         contaFixa: { select: { nome: true } },
         contaAPagar: { select: { vencimento: true, pagaEm: true } },
+        enviadaPor: { select: { pessoa: true } },
       },
       orderBy: [{ pagaEm: { sort: 'desc', nulls: 'first' } }, { vencimento: { sort: 'asc', nulls: 'last' } }, { criadaEm: 'desc' }],
     });
@@ -94,6 +100,25 @@ class CobrancasService {
       vencimento: c.vencimento ?? c.contaAPagar?.vencimento ?? null,
       pagaEm: c.pagaEm ?? c.contaAPagar?.pagaEm ?? null,
       pagaAutomaticamente: !!c.lancamentoId,
+      enviadaPor: c.enviadaPor?.pessoa ?? null,
+    }));
+  }
+
+  // O que a pessoa do acesso de envio mandou (e se você já pagou).
+  async enviadas(usuario: Usuario) {
+    await this.ligarPagamentos();
+    const cobrancas = await this.prisma.cobranca.findMany({
+      where: { enviadaPorId: usuario.passkeyId, criadaEm: { gte: new Date(Date.now() - 90 * DIA) } },
+      orderBy: { criadaEm: 'desc' },
+    });
+    return cobrancas.map((c) => ({
+      id: c.id,
+      tipo: c.tipo,
+      titulo: c.descricao ?? c.recebedor ?? (c.tipo === 'PIX' ? 'Pix' : 'Boleto'),
+      valor: c.valor?.toNumber() ?? null,
+      vencimento: c.vencimento,
+      enviadaEm: c.criadaEm,
+      pagaEm: c.pagaEm,
     }));
   }
 
@@ -110,8 +135,10 @@ class CobrancasService {
     }
   }
 
-  async remover(id: string) {
-    await this.prisma.cobranca.deleteMany({ where: { id } });
+  async remover(id: string, usuario: Usuario) {
+    // quem só envia pode apagar só o que mandou e ainda não foi pago
+    const restricao = usuario.papel === 'DONO' ? {} : { enviadaPorId: usuario.passkeyId, pagaEm: null };
+    await this.prisma.cobranca.deleteMany({ where: { id, ...restricao } });
   }
 
   private ler(codigo: string) {
@@ -185,15 +212,23 @@ class CobrancasController {
     return this.cobrancas.listar();
   }
 
+  @Get('enviadas')
+  @PermiteEnvio()
+  enviadas(@UsuarioAtual() usuario: Usuario) {
+    return this.cobrancas.enviadas(usuario);
+  }
+
   @Post('conferir')
+  @PermiteEnvio()
   @HttpCode(200)
   conferir(@Body() dados: NovaCobranca) {
     return this.cobrancas.conferir(dados.codigo);
   }
 
   @Post()
-  criar(@Body() dados: NovaCobranca) {
-    return this.cobrancas.criar(dados);
+  @PermiteEnvio()
+  criar(@Body() dados: NovaCobranca, @UsuarioAtual() usuario: Usuario) {
+    return this.cobrancas.criar(dados, usuario);
   }
 
   @Patch(':id')
@@ -202,9 +237,10 @@ class CobrancasController {
   }
 
   @Delete(':id')
+  @PermiteEnvio()
   @HttpCode(204)
-  remover(@Param('id') id: string) {
-    return this.cobrancas.remover(id);
+  remover(@Param('id') id: string, @UsuarioAtual() usuario: Usuario) {
+    return this.cobrancas.remover(id, usuario);
   }
 }
 

@@ -8,6 +8,7 @@ import {
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { Papel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 
 const DURACAO_SESSAO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
@@ -19,7 +20,16 @@ interface Desafio {
   valor: string;
   tipo: 'cadastro' | 'entrada';
   expiraEm: number;
+  conviteId?: string; // cadastro pelo convite (acesso só de envio)
 }
+
+export interface Usuario {
+  passkeyId: string;
+  papel: Papel;
+  pessoa: string | null;
+}
+
+const DURACAO_CONVITE_MS = 48 * 60 * 60 * 1000;
 
 export const hashDoToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -39,41 +49,51 @@ export class AuthService {
   }
 
   async estado(token?: string) {
-    const [aparelhos, sessao] = await Promise.all([
+    const [aparelhos, usuario] = await Promise.all([
       this.prisma.passkey.count(),
-      token ? this.sessaoValida(token) : null,
+      token ? this.usuarioDaSessao(token) : null,
     ]);
-    return { logado: !!sessao, primeiroAcesso: aparelhos === 0 };
+    return { logado: !!usuario, primeiroAcesso: aparelhos === 0, papel: usuario?.papel ?? null, pessoa: usuario?.pessoa ?? null };
   }
 
   // ---------- cadastro de aparelho ----------
 
-  // Primeiro aparelho: precisa do código do .env. Depois: só quem já está logado.
-  async opcoesDeCadastro(logado: boolean, codigo?: string) {
+  // Três jeitos de cadastrar um aparelho:
+  //  - primeiro de todos: com o código do .env (vira DONO);
+  //  - outro aparelho seu: só com sessão de DONO aberta;
+  //  - pelo convite: a pessoa convidada, com o papel do convite (ENVIO).
+  async opcoesDeCadastro(usuario: Usuario | null, codigo?: string, convite?: string) {
     const existentes = await this.prisma.passkey.findMany({ select: { credentialId: true, transports: true } });
+    let conviteId: string | undefined;
+    let pessoa = 'dono';
 
-    if (existentes.length === 0) {
+    if (convite) {
+      const achado = await this.conviteValido(convite);
+      conviteId = achado.id;
+      pessoa = achado.pessoa;
+    } else if (existentes.length === 0) {
       if (!codigoConfere(codigo, process.env.CODIGO_CADASTRO)) throw new ForbiddenException('código de cadastro errado');
-    } else if (!logado) {
-      throw new UnauthorizedException('entre com um aparelho já cadastrado para adicionar outro');
+    } else if (usuario?.papel !== 'DONO') {
+      throw new UnauthorizedException('entre com um aparelho seu já cadastrado para adicionar outro');
     }
 
     const opcoes = await generateRegistrationOptions({
       rpName: this.rp.nome,
       rpID: this.rp.id,
-      userName: 'dono',
-      userDisplayName: 'Dono do GestorDeFinanças',
-      userID: ID_DO_DONO,
+      userName: pessoa,
+      userDisplayName: conviteId ? `${pessoa} (envio de boletos)` : 'Dono do GestorDeFinanças',
+      // cada pessoa tem o seu "usuário": a passkey da Convidado não se mistura com a sua
+      userID: conviteId ? new TextEncoder().encode(`gestor-financas-${conviteId}`) : ID_DO_DONO,
       attestationType: 'none',
       excludeCredentials: existentes.map((p) => ({ id: p.credentialId, transports: p.transports })),
       authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
     });
 
-    return { opcoes, idDesafio: this.guardarDesafio(opcoes.challenge, 'cadastro') };
+    return { opcoes, idDesafio: this.guardarDesafio(opcoes.challenge, 'cadastro', conviteId) };
   }
 
   async concluirCadastro(idDesafio: string | undefined, resposta: RegistrationResponseJSON, aparelho: string) {
-    const desafio = this.usarDesafio(idDesafio, 'cadastro');
+    const { valor: desafio, conviteId } = this.usarDesafio(idDesafio, 'cadastro');
     const { verified, registrationInfo } = await verifyRegistrationResponse({
       response: resposta,
       expectedChallenge: desafio,
@@ -85,16 +105,25 @@ export class AuthService {
     if (!verified || !registrationInfo) throw new UnauthorizedException('não foi possível confirmar o aparelho');
 
     const { credential } = registrationInfo;
-    const passkey = await this.prisma.passkey.create({
-      data: {
-        credentialId: credential.id,
-        chavePublica: Buffer.from(credential.publicKey),
-        contador: credential.counter,
-        transports: credential.transports ?? [],
-        aparelho: aparelho.trim().slice(0, 40) || 'Aparelho',
-      },
+    const dados = {
+      credentialId: credential.id,
+      chavePublica: Buffer.from(credential.publicKey),
+      contador: credential.counter,
+      transports: credential.transports ?? [],
+      aparelho: aparelho.trim().slice(0, 40) || 'Aparelho',
+    };
+    if (!conviteId) return (await this.prisma.passkey.create({ data: dados })).id;
+
+    // convite: marca como usado na mesma transação (ninguém usa duas vezes)
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.convite.updateMany({
+        where: { id: conviteId, usadoEm: null, expiraEm: { gt: new Date() } },
+        data: { usadoEm: new Date() },
+      });
+      if (count === 0) throw new ForbiddenException('o convite já foi usado ou expirou');
+      const convite = await tx.convite.findUniqueOrThrow({ where: { id: conviteId } });
+      return (await tx.passkey.create({ data: { ...dados, papel: convite.papel, pessoa: convite.pessoa } })).id;
     });
-    return passkey.id;
   }
 
   // ---------- entrar ----------
@@ -106,7 +135,7 @@ export class AuthService {
   }
 
   async concluirEntrada(idDesafio: string | undefined, resposta: AuthenticationResponseJSON) {
-    const desafio = this.usarDesafio(idDesafio, 'entrada');
+    const { valor: desafio } = this.usarDesafio(idDesafio, 'entrada');
     const passkey = await this.prisma.passkey.findUnique({ where: { credentialId: resposta.id } });
     if (!passkey) throw new UnauthorizedException('aparelho não cadastrado');
 
@@ -144,10 +173,43 @@ export class AuthService {
     return { token, expiraEm };
   }
 
-  async sessaoValida(token: string) {
-    const sessao = await this.prisma.sessao.findUnique({ where: { id: hashDoToken(token) } });
+  async usuarioDaSessao(token: string): Promise<Usuario | null> {
+    const sessao = await this.prisma.sessao.findUnique({
+      where: { id: hashDoToken(token) },
+      include: { passkey: { select: { id: true, papel: true, pessoa: true } } },
+    });
     if (!sessao || sessao.expiraEm < new Date()) return null;
-    return sessao;
+    return { passkeyId: sessao.passkey.id, papel: sessao.passkey.papel, pessoa: sessao.passkey.pessoa };
+  }
+
+  // ---------- convites ----------
+
+  async criarConvite(pessoa: string) {
+    // 8 letras e números sem os que confundem (0/O, 1/I)
+    const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const codigo = Array.from(randomBytes(8), (b) => alfabeto[b % alfabeto.length]).join('');
+    await this.prisma.convite.create({
+      data: { codigoHash: hashDoToken(codigo), pessoa: pessoa.trim(), expiraEm: new Date(Date.now() + DURACAO_CONVITE_MS) },
+    });
+    return { codigo, validoAte: new Date(Date.now() + DURACAO_CONVITE_MS) };
+  }
+
+  convitesAbertos() {
+    return this.prisma.convite.findMany({
+      where: { usadoEm: null, expiraEm: { gt: new Date() } },
+      select: { id: true, pessoa: true, expiraEm: true },
+      orderBy: { criadoEm: 'desc' },
+    });
+  }
+
+  async cancelarConvite(id: string) {
+    await this.prisma.convite.deleteMany({ where: { id, usadoEm: null } });
+  }
+
+  private async conviteValido(codigo: string) {
+    const convite = await this.prisma.convite.findUnique({ where: { codigoHash: hashDoToken(codigo.trim().toUpperCase()) } });
+    if (!convite || convite.usadoEm || convite.expiraEm < new Date()) throw new ForbiddenException('convite inválido, usado ou vencido');
+    return convite;
   }
 
   async fecharSessao(token?: string) {
@@ -158,26 +220,27 @@ export class AuthService {
 
   aparelhos() {
     return this.prisma.passkey.findMany({
-      select: { id: true, aparelho: true, criadaEm: true, usadaEm: true },
+      select: { id: true, aparelho: true, papel: true, pessoa: true, criadaEm: true, usadaEm: true },
       orderBy: { criadaEm: 'asc' },
     });
   }
 
   async removerAparelho(id: string) {
-    if ((await this.prisma.passkey.count()) <= 1) {
-      throw new ForbiddenException('não dá para remover o único aparelho: você ficaria trancado para fora');
+    const alvo = await this.prisma.passkey.findUnique({ where: { id } });
+    if (alvo?.papel === 'DONO' && (await this.prisma.passkey.count({ where: { papel: 'DONO' } })) <= 1) {
+      throw new ForbiddenException('não dá para remover o seu único aparelho: você ficaria trancado para fora');
     }
     await this.prisma.passkey.delete({ where: { id } });
   }
 
   // ---------- desafios ----------
 
-  private guardarDesafio(valor: string, tipo: Desafio['tipo']) {
+  private guardarDesafio(valor: string, tipo: Desafio['tipo'], conviteId?: string) {
     const agora = Date.now();
     for (const [id, d] of this.desafios) if (d.expiraEm < agora) this.desafios.delete(id);
 
     const id = randomBytes(16).toString('base64url');
-    this.desafios.set(id, { valor, tipo, expiraEm: agora + DURACAO_DESAFIO_MS });
+    this.desafios.set(id, { valor, tipo, conviteId, expiraEm: agora + DURACAO_DESAFIO_MS });
     return id;
   }
 
@@ -188,7 +251,7 @@ export class AuthService {
     if (!desafio || desafio.tipo !== tipo || desafio.expiraEm < Date.now()) {
       throw new UnauthorizedException('o pedido expirou, tente de novo');
     }
-    return desafio.valor;
+    return desafio;
   }
 }
 

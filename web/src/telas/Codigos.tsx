@@ -48,11 +48,15 @@ export function Codigos({ aoMudar }: { aoMudar: () => void }) {
                 <h2 className="text-[13px] font-semibold text-suave">Pagos nos últimos 30 dias</h2>
                 <Cartao className="px-4">
                   {pagas.map((c, i) => (
-                    <div key={c.id} className={`flex min-h-14 items-center justify-between gap-3 ${i > 0 ? 'border-t border-divisor' : ''}`}>
+                    <div
+                      key={c.id}
+                      className={`flex min-h-14 items-center justify-between gap-3 ${i > 0 ? 'border-t border-divisor' : ''}`}
+                    >
                       <span className="flex flex-col">
                         <span className="text-[15px]">{c.titulo}</span>
                         <span className="text-[13px] text-suave">
-                          pago em {diaMes(c.pagaEm!)}{c.pagaAutomaticamente ? ' · achado no extrato' : ''}
+                          pago em {diaMes(c.pagaEm!)}
+                          {c.pagaAutomaticamente ? ' · achado no extrato' : ''}
                         </span>
                       </span>
                       <span className="text-[15px] text-suave">{c.valor !== null ? brl(c.valor) : ''}</span>
@@ -93,11 +97,14 @@ function CartaoCodigo({ cobranca: c, aoMudar }: { cobranca: Cobranca; aoMudar: (
           <span className="text-xs font-semibold text-suave">{NOME_TIPO[c.tipo]}</span>
           <h3 className="text-base font-semibold">{c.titulo}</h3>
           {c.recebedor && <span className="text-[13px] text-suave">recebedor: {c.recebedor}</span>}
+          {c.enviadaPor && <span className="text-[13px] font-medium text-floresta-escura">enviado por {c.enviadaPor}</span>}
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="font-titulo text-xl font-bold">{c.valor !== null ? brl(c.valor) : 'valor no app'}</span>
           {c.vencimento && (
-            <span className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${urgente ? 'bg-ambar-claro text-ambar-texto' : 'bg-divisor text-suave'}`}>
+            <span
+              className={`rounded-lg px-2 py-0.5 text-xs font-semibold ${urgente ? 'bg-ambar-claro text-ambar-texto' : 'bg-divisor text-suave'}`}
+            >
               {dias! < 0 ? `venceu ${diaMes(c.vencimento)}` : dias === 0 ? 'vence hoje' : `vence ${diaMes(c.vencimento)}`}
             </span>
           )}
@@ -106,7 +113,11 @@ function CartaoCodigo({ cobranca: c, aoMudar }: { cobranca: Cobranca; aoMudar: (
 
       {mostrarQr && (
         <div className="flex flex-col items-center gap-2 rounded-xl bg-fundo p-4">
-          {qr ? <img src={qr} alt={`QR code do Pix de ${c.titulo}`} className="size-52 rounded-lg bg-white p-2" /> : <span className="text-sm">Gerando…</span>}
+          {qr ? (
+            <img src={qr} alt={`QR code do Pix de ${c.titulo}`} className="size-52 rounded-lg bg-white p-2" />
+          ) : (
+            <span className="text-sm">Gerando…</span>
+          )}
           <span className="text-center text-xs text-suave">Abra o app do banco no celular e escaneie</span>
         </div>
       )}
@@ -136,8 +147,9 @@ function CartaoCodigo({ cobranca: c, aoMudar }: { cobranca: Cobranca; aoMudar: (
   )
 }
 
-function AdicionarCodigo({ aoSalvar }: { aoSalvar: () => void }) {
-  const { dados: fixas = [] } = useApi(api.contasFixas, [])
+export function AdicionarCodigo({ aoSalvar, comContaFixa = true }: { aoSalvar: () => void; comContaFixa?: boolean }) {
+  // quem só envia boletos não vê (nem escolhe) as suas contas fixas
+  const { dados: fixas = [] } = useApi(() => (comContaFixa ? api.contasFixas() : Promise.resolve([])), [comContaFixa])
   const [texto, setTexto] = useState('')
   const [lendo, setLendo] = useState(false)
   const [lido, setLido] = useState<CodigoConferido>()
@@ -211,7 +223,11 @@ function AdicionarCodigo({ aoSalvar }: { aoSalvar: () => void }) {
         </label>
       </div>
 
-      {erro && <p role="alert" className="rounded-xl bg-ambar-claro p-3 text-sm text-ambar-texto">{erro}</p>}
+      {erro && (
+        <p role="alert" className="rounded-xl bg-ambar-claro p-3 text-sm text-ambar-texto">
+          {erro}
+        </p>
+      )}
 
       {aviso && (
         <p role="alert" className="rounded-xl border-2 border-ambar bg-ambar-claro p-3 text-sm font-semibold text-ambar-texto">
@@ -239,22 +255,33 @@ function AdicionarCodigo({ aoSalvar }: { aoSalvar: () => void }) {
               </>
             )}
           </dl>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] text-suave">É de qual conta? (opcional)</span>
-            <select className={`${campo} h-11`} value={contaFixaId} onChange={(e) => setContaFixaId(e.target.value)}>
-              <option value="">Nenhuma, é avulsa</option>
-              {fixas.map((f) => (
-                <option key={f.id} value={f.id}>{f.nome}</option>
-              ))}
-            </select>
-          </label>
+          {comContaFixa && (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-suave">É de qual conta? (opcional)</span>
+              <select className={`${campo} h-11`} value={contaFixaId} onChange={(e) => setContaFixaId(e.target.value)}>
+                <option value="">Nenhuma, é avulsa</option>
+                {fixas.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {!contaFixaId && (
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] text-suave">Nome para lembrar</span>
-              <input className={`${campo} h-11`} value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: Boleto da escola" />
+              <input
+                className={`${campo} h-11`}
+                value={descricao}
+                onChange={(e) => setDescricao(e.target.value)}
+                placeholder="Ex.: Boleto da escola"
+              />
             </label>
           )}
-          <button className={botaoPrincipal} onClick={salvar}>Guardar para pagar</button>
+          <button className={botaoPrincipal} onClick={salvar}>
+            Guardar para pagar
+          </button>
         </div>
       )}
     </Cartao>

@@ -15,8 +15,9 @@ import { Metas } from './telas/Metas'
 import { Investimentos } from './telas/Investimentos'
 import { Sugestoes } from './telas/Sugestoes'
 import { Planejamento } from './telas/Planejamento'
+import { EnviarBoletos } from './telas/EnviarBoletos'
 
-type Estado = { logado: boolean; primeiroAcesso: boolean }
+type Estado = Awaited<ReturnType<typeof auth.estado>>
 
 // Nada do app aparece sem sessão: primeiro a porta, depois a casa.
 function App() {
@@ -36,8 +37,15 @@ function App() {
     return () => window.removeEventListener('gf:sessao-encerrada', aoEncerrar)
   }, [])
 
-  if (!estado) return <div className="p-6"><Carregando erro={erro} /></div>
+  if (!estado)
+    return (
+      <div className="p-6">
+        <Carregando erro={erro} />
+      </div>
+    )
   if (!estado.logado) return <Entrar primeiroAcesso={estado.primeiroAcesso} aoEntrar={conferir} />
+  // acesso só de envio (a Convidado): uma tela só, sem nada das finanças
+  if (estado.papel === 'ENVIO') return <EnviarBoletos pessoa={estado.pessoa} aoSair={conferir} />
 
   return (
     <BrowserRouter>

@@ -20,12 +20,16 @@ export function mensagemDeErro(e: unknown) {
   return erro?.message ?? 'Algo deu errado.'
 }
 
-const botao = 'flex h-[54px] items-center justify-center gap-2.5 rounded-2xl bg-floresta text-base font-semibold text-white disabled:opacity-60'
+const botao =
+  'flex h-[54px] items-center justify-center gap-2.5 rounded-2xl bg-floresta text-base font-semibold text-white disabled:opacity-60'
 const campo = 'h-12 rounded-xl border border-borda-forte bg-white px-3.5 text-base text-tinta'
 
 export function Entrar({ primeiroAcesso, aoEntrar }: { primeiroAcesso: boolean; aoEntrar: () => void }) {
   const [codigo, setCodigo] = useState('')
   const [aparelho, setAparelho] = useState(nomeDoAparelho)
+  // "Tenho um convite": quem vai só enviar boletos (a Convidado) entra por aqui
+  const [comConvite, setComConvite] = useState(() => new URLSearchParams(location.search).has('convite'))
+  const [convite, setConvite] = useState(() => new URLSearchParams(location.search).get('convite') ?? '')
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState<string>()
 
@@ -47,7 +51,7 @@ export function Entrar({ primeiroAcesso, aoEntrar }: { primeiroAcesso: boolean; 
     setOcupado(true)
     setErro(undefined)
     try {
-      const opcoes = await auth.opcoesCadastro(codigo)
+      const opcoes = await auth.opcoesCadastro(comConvite ? { convite } : { codigo })
       await auth.verificarCadastro(await startRegistration({ optionsJSON: opcoes }), aparelho)
       aoEntrar()
     } catch (e) {
@@ -67,9 +71,11 @@ export function Entrar({ primeiroAcesso, aoEntrar }: { primeiroAcesso: boolean; 
         </span>
         <h1 className="font-titulo text-[28px] font-bold">GestorDeFinanças</h1>
         <p className="max-w-[260px] text-[15px] text-suave">
-          {primeiroAcesso
-            ? 'Primeiro acesso: cadastre este aparelho para entrar com Face ID ou Touch ID.'
-            : 'Seu dinheiro, num lugar só. Os dados ficam no seu servidor.'}
+          {comConvite
+            ? 'Você recebeu um convite para enviar boletos. Cadastre o Face ID deste aparelho.'
+            : primeiroAcesso
+              ? 'Primeiro acesso: cadastre este aparelho para entrar com Face ID ou Touch ID.'
+              : 'Seu dinheiro, num lugar só. Os dados ficam no seu servidor.'}
         </p>
       </div>
 
@@ -80,40 +86,76 @@ export function Entrar({ primeiroAcesso, aoEntrar }: { primeiroAcesso: boolean; 
           </p>
         )}
 
-        {primeiroAcesso ? (
+        {comConvite || primeiroAcesso ? (
           <>
             <label className="flex flex-col gap-1.5">
-              <span className="text-[13px] text-suave">Código de cadastro (está no .env do servidor)</span>
+              <span className="text-[13px] text-suave">
+                {comConvite ? 'Código do convite' : 'Código de cadastro (está no .env do servidor)'}
+              </span>
               <input
                 className={`${campo} font-mono tracking-widest uppercase`}
-                value={codigo}
+                value={comConvite ? convite : codigo}
                 autoComplete="off"
                 autoCapitalize="characters"
-                onChange={(e) => setCodigo(e.target.value)}
+                onChange={(e) => (comConvite ? setConvite(e.target.value) : setCodigo(e.target.value))}
               />
             </label>
             <label className="flex flex-col gap-1.5">
               <span className="text-[13px] text-suave">Nome deste aparelho</span>
               <input className={campo} value={aparelho} onChange={(e) => setAparelho(e.target.value)} />
             </label>
-            <button className={botao} disabled={ocupado || semSuporte || !codigo.trim()} onClick={cadastrar}>
+            <button className={botao} disabled={ocupado || semSuporte || !(comConvite ? convite : codigo).trim()} onClick={cadastrar}>
               Cadastrar este aparelho
             </button>
+            {comConvite && !primeiroAcesso && (
+              <button className="text-sm text-suave" onClick={() => setComConvite(false)}>
+                Já tenho cadastro, quero entrar
+              </button>
+            )}
           </>
         ) : (
           <button className={botao} disabled={ocupado || semSuporte} onClick={entrar}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
               <path d="M9 9.5v1M15 9.5v1M12 9.5v3.5h-1M9.5 15.5c1.4 1 3.6 1 5 0" />
             </svg>
             Entrar com Face ID
           </button>
         )}
+        {!comConvite && !primeiroAcesso && (
+          <button className="text-sm font-medium text-floresta" onClick={() => setComConvite(true)}>
+            Tenho um convite
+          </button>
+        )}
 
-        {erro && <p role="alert" className="text-center text-sm text-ambar-texto">{erro}</p>}
+        {erro && (
+          <p role="alert" className="text-center text-sm text-ambar-texto">
+            {erro}
+          </p>
+        )}
 
         <p className="flex items-center justify-center gap-1.5 text-[13px] text-suave">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
             <rect x="5" y="11" width="14" height="10" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>

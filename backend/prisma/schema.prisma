@@ -17,16 +17,36 @@ datasource db {
 // ---------- Acesso ----------
 
 // Face ID / Touch ID (WebAuthn). Uma linha por aparelho cadastrado.
+// DONO vê tudo. ENVIO só manda boletos e Pix para o dono pagar (a Convidado).
+enum Papel {
+  DONO
+  ENVIO
+}
+
 model Passkey {
-  id           String    @id @default(cuid())
-  credentialId String    @unique // base64url, como o navegador manda
+  id           String     @id @default(cuid())
+  credentialId String     @unique // base64url, como o navegador manda
   chavePublica Bytes
-  contador     Int       @default(0)
+  contador     Int        @default(0)
   transports   String[] // "internal", "hybrid"... ajuda o navegador a achar a passkey
   aparelho     String // "iPhone", "MacBook Air"
-  criadaEm     DateTime  @default(now())
+  papel        Papel      @default(DONO)
+  pessoa       String? // nome de quem usa (para o ENVIO: "Convidado")
+  criadaEm     DateTime   @default(now())
   usadaEm      DateTime?
   sessoes      Sessao[]
+  cobrancas    Cobranca[]
+}
+
+// Convite para cadastrar alguém com acesso só de envio. Vale uma vez.
+model Convite {
+  id         String    @id @default(cuid())
+  codigoHash String    @unique // sha256 do código; o código só aparece uma vez
+  pessoa     String
+  papel      Papel     @default(ENVIO)
+  expiraEm   DateTime
+  usadoEm    DateTime?
+  criadoEm   DateTime  @default(now())
 }
 
 // Sessão aberta depois do Face ID. O cookie leva um token aleatório; aqui fica
@@ -238,6 +258,9 @@ model Cobranca {
   pagaEm        DateTime?
   lancamentoId  String?      @unique
   lancamento    Lancamento?  @relation(fields: [lancamentoId], references: [id])
+  // quem mandou (a Convidado pelo acesso de envio); vazio = você mesmo
+  enviadaPorId  String?
+  enviadaPor    Passkey?     @relation(fields: [enviadaPorId], references: [id], onDelete: SetNull)
   criadaEm      DateTime     @default(now())
 
   @@index([pagaEm])

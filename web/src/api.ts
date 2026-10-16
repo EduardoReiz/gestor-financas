@@ -16,6 +16,7 @@ export interface Resumo {
   metas: { id: string; nome: string; alvo: number; guardado: number; prazo: string }[]
   investimentos: { total: number; rendimentoNoMes: number }
   sugestao: { id: string; titulo: string; texto: string } | null
+  codigosParaPagar: { quantidade: number; total: number; enviadosPor: string[] }
 }
 
 export interface Lancamento {
@@ -77,6 +78,17 @@ export interface Cobranca {
   vencimento: string | null
   pagaEm: string | null
   pagaAutomaticamente: boolean
+  enviadaPor: string | null
+}
+
+export interface CobrancaEnviada {
+  id: string
+  tipo: Cobranca['tipo']
+  titulo: string
+  valor: number | null
+  vencimento: string | null
+  enviadaEm: string
+  pagaEm: string | null
 }
 
 export interface CodigoConferido {
@@ -188,6 +200,8 @@ async function pedir<T>(caminho: string, init?: RequestInit): Promise<T> {
 export interface Aparelho {
   id: string
   aparelho: string
+  papel: 'DONO' | 'ENVIO'
+  pessoa: string | null
   criadaEm: string
   usadaEm: string | null
 }
@@ -195,8 +209,12 @@ export interface Aparelho {
 const postar = (corpo: unknown) => ({ method: 'POST', body: JSON.stringify(corpo) })
 
 export const auth = {
-  estado: () => pedir<{ logado: boolean; primeiroAcesso: boolean }>('/auth/estado'),
-  opcoesCadastro: (codigo?: string) => pedir<PublicKeyCredentialCreationOptionsJSON>('/auth/cadastro/opcoes', postar({ codigo })),
+  estado: () => pedir<{ logado: boolean; primeiroAcesso: boolean; papel: 'DONO' | 'ENVIO' | null; pessoa: string | null }>('/auth/estado'),
+  opcoesCadastro: (dados: { codigo?: string; convite?: string } = {}) =>
+    pedir<PublicKeyCredentialCreationOptionsJSON>('/auth/cadastro/opcoes', postar(dados)),
+  criarConvite: (pessoa: string) => pedir<{ codigo: string; validoAte: string }>('/auth/convites', postar({ pessoa })),
+  convites: () => pedir<{ id: string; pessoa: string; expiraEm: string }[]>('/auth/convites'),
+  cancelarConvite: (id: string) => pedir<void>(`/auth/convites/${id}`, { method: 'DELETE' }),
   verificarCadastro: (resposta: unknown, aparelho: string) => pedir<void>('/auth/cadastro/verificar', postar({ resposta, aparelho })),
   opcoesEntrada: () => pedir<PublicKeyCredentialRequestOptionsJSON>('/auth/entrar/opcoes', postar({})),
   verificarEntrada: (resposta: unknown) => pedir<void>('/auth/entrar/verificar', postar({ resposta })),
@@ -246,6 +264,7 @@ export const api = {
     pedir<void>(`/contas/fixas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }),
   desativarContaFixa: (id: string) => pedir<void>(`/contas/fixas/${id}`, { method: 'DELETE' }),
   cobrancas: () => pedir<Cobranca[]>('/cobrancas'),
+  cobrancasEnviadas: () => pedir<CobrancaEnviada[]>('/cobrancas/enviadas'),
   conferirCodigo: (codigo: string) => pedir<CodigoConferido>('/cobrancas/conferir', postar({ codigo })),
   novaCobranca: (dados: { codigo: string; descricao?: string; contaFixaId?: string }) =>
     pedir<{ id: string; aviso: string | null }>('/cobrancas', postar(dados)),

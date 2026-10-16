@@ -5,10 +5,15 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simp
 import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 import type { CookieOptions, Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { COOKIE_DESAFIO, COOKIE_SESSAO, Publico, SessaoGuard } from './auth.guard';
+import { COOKIE_DESAFIO, COOKIE_SESSAO, PermiteEnvio, Publico, SessaoGuard } from './auth.guard';
 
 class PedidoCadastro {
   @IsOptional() @IsString() @MaxLength(40) codigo?: string;
+  @IsOptional() @IsString() @MaxLength(20) convite?: string;
+}
+
+class NovoConvite {
+  @IsString() @MaxLength(40) pessoa!: string;
 }
 
 class RespostaCadastro {
@@ -45,8 +50,9 @@ class AuthController {
   @Post('cadastro/opcoes')
   @Tentativas()
   async opcoesCadastro(@Req() req: Request, @Res({ passthrough: true }) res: Response, @Body() corpo: PedidoCadastro) {
-    const { logado } = await this.auth.estado(req.cookies?.[COOKIE_SESSAO]);
-    const { opcoes, idDesafio } = await this.auth.opcoesDeCadastro(logado, corpo.codigo);
+    const token = req.cookies?.[COOKIE_SESSAO];
+    const usuario = token ? await this.auth.usuarioDaSessao(token) : null;
+    const { opcoes, idDesafio } = await this.auth.opcoesDeCadastro(usuario, corpo.codigo, corpo.convite);
     res.cookie(COOKIE_DESAFIO, idDesafio, { ...cookieBase, maxAge: 5 * 60_000 });
     return opcoes;
   }
@@ -82,10 +88,28 @@ class AuthController {
   }
 
   @Post('sair')
+  @PermiteEnvio()
   @HttpCode(204)
   async sair(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.auth.fecharSessao(req.cookies?.[COOKIE_SESSAO]);
     res.clearCookie(COOKIE_SESSAO, cookieBase);
+  }
+
+  // convite para alguém só enviar boletos (só o dono cria)
+  @Post('convites')
+  criarConvite(@Body() corpo: NovoConvite) {
+    return this.auth.criarConvite(corpo.pessoa);
+  }
+
+  @Get('convites')
+  convites() {
+    return this.auth.convitesAbertos();
+  }
+
+  @Delete('convites/:id')
+  @HttpCode(204)
+  cancelarConvite(@Param('id') id: string) {
+    return this.auth.cancelarConvite(id);
   }
 
   @Get('aparelhos')

@@ -108,6 +108,20 @@ export class ResumoService {
         rendimentoNoMes: investido.minus(investidoNoInicioDoMes).toNumber(),
       },
       sugestao: sugestao && { id: sugestao.id, titulo: sugestao.titulo, texto: sugestao.texto },
+      codigosParaPagar: await this.codigosParaPagar(),
+    };
+  }
+
+  private async codigosParaPagar() {
+    const pendentes = await this.prisma.cobranca.findMany({
+      where: { pagaEm: null },
+      select: { valor: true, enviadaPor: { select: { pessoa: true } } },
+    });
+    const enviadosPor = [...new Set(pendentes.map((c) => c.enviadaPor?.pessoa).filter((p): p is string => !!p))];
+    return {
+      quantidade: pendentes.length,
+      total: pendentes.reduce((s, c) => s + (c.valor?.toNumber() ?? 0), 0),
+      enviadosPor,
     };
   }
 

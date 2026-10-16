@@ -71,6 +71,22 @@ export function Inicio() {
             </div>
 
             <div className="flex min-w-0 flex-col gap-4 lg:flex-[2] lg:gap-5">
+              {r.codigosParaPagar.quantidade > 0 && (
+                <Link
+                  to="/contas?aba=codigos"
+                  className="flex items-center justify-between rounded-2xl bg-floresta-clara p-4 text-floresta-escura"
+                >
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[15px] font-semibold">
+                      {r.codigosParaPagar.quantidade === 1 ? '1 código para pagar' : `${r.codigosParaPagar.quantidade} códigos para pagar`}
+                    </span>
+                    {r.codigosParaPagar.enviadosPor.length > 0 && (
+                      <span className="text-[13px]">enviado por {r.codigosParaPagar.enviadosPor.join(' e ')}</span>
+                    )}
+                  </span>
+                  <span className="font-titulo text-lg font-bold">{brl(r.codigosParaPagar.total)}</span>
+                </Link>
+              )}
               {plano && (
                 <Link to="/planejamento" className="flex items-center justify-between rounded-2xl border border-borda bg-white p-4">
                   <span className="flex flex-col gap-0.5">
