@@ -66,12 +66,13 @@ export function Inicio() {
           </div>
 
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-            <div className="flex min-w-0 flex-col gap-4 lg:flex-[3] lg:gap-5">
+            {/* no celular, "para onde foi o dinheiro" (lista longa) fica por último */}
+            <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-none lg:flex-[3] lg:gap-5">
               <GraficoMeses meses={r.saidasUltimosMeses} />
               <PorCategoria categorias={r.porCategoria} />
             </div>
 
-            <div className="flex min-w-0 flex-col gap-4 lg:flex-[2] lg:gap-5">
+            <div className="order-1 flex min-w-0 flex-col gap-4 lg:order-none lg:flex-[2] lg:gap-5">
               {r.codigosParaPagar.quantidade > 0 && (
                 <Link
                   to="/contas?aba=codigos"
