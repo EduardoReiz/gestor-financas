@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type {
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/browser'
+import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser'
 
 export type Sentido = 'ENTRADA' | 'SAIDA'
 
@@ -90,6 +87,16 @@ export interface CodigoConferido {
   contaFixaSugerida: string | null
 }
 
+export interface ContaFixa {
+  id: string
+  nome: string
+  valorPrevisto: number
+  diaVencimento: number
+  formaPagamento: string
+  recebedor: string | null
+  contem: string | null
+}
+
 export interface Contas {
   total: number
   pago: number
@@ -113,7 +120,16 @@ export interface Meta {
 export interface Investimentos {
   total: number
   rendeuNoMes: number
-  itens: { id: string; nome: string; banco: string; tipo: string; saldo: number; rendeuNoMes: number; fracao: number; vencimento: string | null }[]
+  itens: {
+    id: string
+    nome: string
+    banco: string
+    tipo: string
+    saldo: number
+    rendeuNoMes: number
+    fracao: number
+    vencimento: string | null
+  }[]
   dica: { texto: string } | null
 }
 
@@ -174,9 +190,7 @@ export const api = {
   sincronizar: () => pedir<{ novos?: number; jaEstavaRodando?: boolean }>('/sincronizacao', { method: 'POST' }),
   resumo: (mes: string) => pedir<Resumo>(`/resumo?mes=${mes}`),
   lancamentos: (filtro: Record<string, string | undefined>) => {
-    const params = new URLSearchParams(
-      Object.entries(filtro).filter((par): par is [string, string] => !!par[1]),
-    )
+    const params = new URLSearchParams(Object.entries(filtro).filter((par): par is [string, string] => !!par[1]))
     return pedir<Lancamento[]>(`/lancamentos?${params}`)
   },
   categorias: () => pedir<Categoria[]>('/categorias'),
@@ -184,7 +198,14 @@ export const api = {
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
   novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string; contem?: string }) =>
     pedir('/contas/fixas', postar(dados)),
-  contasFixas: () => pedir<{ id: string; nome: string; diaVencimento: number; recebedor: string | null }[]>('/contas/fixas'),
+  contasFixas: () =>
+    pedir<(Omit<ContaFixa, 'valorPrevisto'> & { valorPrevisto: string | number })[]>('/contas/fixas').then((fixas) =>
+      // o Prisma manda Decimal como texto
+      fixas.map((f) => ({ ...f, valorPrevisto: Number(f.valorPrevisto) }) as ContaFixa),
+    ),
+  editarContaFixa: (id: string, dados: Partial<Omit<ContaFixa, 'id' | 'recebedor'>>) =>
+    pedir<void>(`/contas/fixas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }),
+  desativarContaFixa: (id: string) => pedir<void>(`/contas/fixas/${id}`, { method: 'DELETE' }),
   cobrancas: () => pedir<Cobranca[]>('/cobrancas'),
   conferirCodigo: (codigo: string) => pedir<CodigoConferido>('/cobrancas/conferir', postar({ codigo })),
   novaCobranca: (dados: { codigo: string; descricao?: string; contaFixaId?: string }) =>
@@ -201,10 +222,8 @@ export const api = {
     pedir<void>(`/sugestoes/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   definirLimite: (categoriaId: string, valorMensal: number) => pedir('/limites', postar({ categoriaId, valorMensal })),
   confirmarCategoria: (id: string) => pedir<void>(`/lancamentos/${id}/confirmar`, { method: 'PATCH' }),
-  trocarCategoria: (
-    id: string,
-    dados: { categoriaId: string; apelido?: string; aplicarAosProximos?: boolean; contem?: string },
-  ) => pedir<{ ajustados: number }>(`/lancamentos/${id}/categoria`, { method: 'PATCH', body: JSON.stringify(dados) }),
+  trocarCategoria: (id: string, dados: { categoriaId: string; apelido?: string; aplicarAosProximos?: boolean; contem?: string }) =>
+    pedir<{ ajustados: number }>(`/lancamentos/${id}/categoria`, { method: 'PATCH', body: JSON.stringify(dados) }),
 }
 
 // Carrega algo da API e devolve { dados, erro, recarregar }.

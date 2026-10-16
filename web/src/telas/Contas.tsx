@@ -1,32 +1,30 @@
 import { useState } from 'react'
 import { api, useApi, type ContaAPagar } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
-import { BotaoAdicionar, Campo, botaoPrincipal } from '../componentes/Formulario'
-import { brl, diaMes, diasAte, mesAtual, nomeDoMes, paraNumero } from '../formatos'
+import { brl, diaMes, diasAte, mesAtual, nomeDoMes } from '../formatos'
 import { useSearchParams } from 'react-router'
 import { Codigos } from './Codigos'
+import { ContasFixas } from './ContasFixas'
 
 export function Contas() {
   const [mes] = useState(mesAtual)
   const { dados, erro, recarregar } = useApi(() => api.contas(mes), [mes])
-  const [criando, setCriando] = useState(false)
-  // /contas?aba=codigos abre direto nos códigos (vem do aviso no Início)
+  // /contas?aba=codigos abre direto numa aba (vem dos avisos)
   const [parametros, setParametros] = useSearchParams()
-  const aba = parametros.get('aba') === 'codigos' ? 'codigos' : 'mes'
-  const irPara = (nova: 'mes' | 'codigos') => setParametros(nova === 'codigos' ? { aba: 'codigos' } : {})
+  const aba = (['codigos', 'fixas'] as const).find((a) => a === parametros.get('aba')) ?? 'mes'
+  const irPara = (nova: 'mes' | 'codigos' | 'fixas') => setParametros(nova === 'mes' ? {} : { aba: nova })
   const comCodigo = dados?.aVencer.filter((c) => c.temCodigo).length ?? 0
 
   return (
     <>
-      <Cabecalho sobre={nomeDoMes(mes)} titulo="Contas a pagar">
-        {aba === 'mes' && <BotaoAdicionar rotulo="Adicionar conta fixa" aberto={criando} aoAlternar={() => setCriando(!criando)} />}
-      </Cabecalho>
+      <Cabecalho sobre={nomeDoMes(mes)} titulo="Contas a pagar" />
 
-      <div role="tablist" aria-label="Contas a pagar" className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[#E3E8E6] p-1 lg:max-w-md">
+      <div role="tablist" aria-label="Contas a pagar" className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-[#E3E8E6] p-1 lg:max-w-xl">
         {(
           [
-            ['mes', 'Contas do mês'],
-            ['codigos', 'Códigos para pagar'],
+            ['mes', 'Do mês'],
+            ['codigos', 'Códigos'],
+            ['fixas', 'Contas fixas'],
           ] as const
         ).map(([valor, nome]) => (
           <button
@@ -43,17 +41,10 @@ export function Contas() {
 
       {aba === 'codigos' ? (
         <Codigos aoMudar={recarregar} />
+      ) : aba === 'fixas' ? (
+        <ContasFixas aoMudar={recarregar} />
       ) : (
         <>
-          {criando && (
-            <NovaConta
-              aoSalvar={() => {
-                setCriando(false)
-                recarregar()
-              }}
-            />
-          )}
-
           {!dados ? (
             <Carregando erro={erro} />
           ) : (
@@ -152,56 +143,5 @@ function Lista({ titulo, contas, aoMudar, vazio }: { titulo: string; contas: Con
         })}
       </Cartao>
     </section>
-  )
-}
-
-function NovaConta({ aoSalvar }: { aoSalvar: () => void }) {
-  const [nome, setNome] = useState('')
-  const [valor, setValor] = useState('')
-  const [dia, setDia] = useState('10')
-  const [forma, setForma] = useState('Pix')
-  const [contem, setContem] = useState('')
-  const [erro, setErro] = useState<string>()
-
-  async function salvar(e: React.FormEvent) {
-    e.preventDefault()
-    try {
-      await api.novaContaFixa({
-        nome,
-        valorPrevisto: paraNumero(valor),
-        diaVencimento: Number(dia),
-        formaPagamento: forma,
-      })
-      aoSalvar()
-    } catch (e) {
-      setErro((e as Error).message)
-    }
-  }
-
-  return (
-    <form
-      onSubmit={salvar}
-      className="mb-4 grid gap-3 rounded-2xl border border-borda bg-white p-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-end"
-    >
-      <Campo rotulo="Nome" valor={nome} aoMudar={setNome} placeholder="Ex.: Internet" className="lg:col-span-2" />
-      <Campo rotulo="Valor (R$)" valor={valor} aoMudar={setValor} placeholder="99,90" inputMode="decimal" />
-      <Campo rotulo="Dia do vencimento" valor={dia} aoMudar={setDia} inputMode="numeric" />
-      <Campo rotulo="Como paga" valor={forma} aoMudar={setForma} placeholder="Pix, boleto, débito..." />
-      <Campo
-        rotulo="Como aparece no extrato (opcional)"
-        valor={contem}
-        aoMudar={setContem}
-        placeholder="Ex.: EQUATORIAL"
-        className="sm:col-span-2 lg:col-span-5"
-      />
-      <button className={`${botaoPrincipal} sm:col-span-2 lg:col-span-5`} disabled={!nome.trim() || !(paraNumero(valor) > 0)}>
-        Salvar conta fixa
-      </button>
-      {erro && (
-        <p role="alert" className="text-sm text-ambar-texto sm:col-span-2 lg:col-span-5">
-          {erro}
-        </p>
-      )}
-    </form>
   )
 }

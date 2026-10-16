@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Injectable, Module, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsInt, IsNumber, IsOptional, IsPositive, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.module';
@@ -10,6 +10,15 @@ class NovaContaFixa {
   @Type(() => Number) @IsInt() @Min(1) @Max(31) diaVencimento!: number;
   @IsString() @MaxLength(40) formaPagamento!: string;
   @IsOptional() @IsString() categoriaId?: string;
+  @IsOptional() @IsString() @MaxLength(40) contem?: string;
+}
+
+// Na edição tudo é opcional: só muda o que veio.
+class EditarContaFixa {
+  @IsOptional() @IsString() @MaxLength(60) nome?: string;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() valorPrevisto?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31) diaVencimento?: number;
+  @IsOptional() @IsString() @MaxLength(40) formaPagamento?: string;
   @IsOptional() @IsString() @MaxLength(40) contem?: string;
 }
 
@@ -64,9 +73,50 @@ class ContasService {
   fixas() {
     return this.prisma.contaFixa.findMany({
       where: { ativa: true },
-      select: { id: true, nome: true, diaVencimento: true, recebedor: true, contem: true },
-      orderBy: { nome: 'asc' },
+      select: { id: true, nome: true, valorPrevisto: true, diaVencimento: true, formaPagamento: true, recebedor: true, contem: true },
+      orderBy: [{ diaVencimento: 'asc' }, { nome: 'asc' }],
     });
+  }
+
+  // Editar mexe também nas contas deste mês em diante que ainda estão em
+  // aberto: senão o gerador criaria a conta de novo no dia novo (duplicada).
+  async editarFixa(id: string, dados: EditarContaFixa) {
+    const fixa = await this.prisma.contaFixa.findUnique({ where: { id } });
+    if (!fixa) throw new NotFoundException('conta fixa não encontrada');
+    const contem = dados.contem === undefined ? undefined : dados.contem.trim() || null;
+
+    await this.prisma.contaFixa.update({ where: { id }, data: { ...dados, contem } });
+
+    const abertas = await this.prisma.contaAPagar.findMany({
+      where: { contaFixaId: id, pagaEm: null, vencimento: { gte: intervaloDoMes().inicio } },
+      include: { cobranca: { select: { id: true } } },
+    });
+    for (const conta of abertas) {
+      const ano = conta.vencimento.getUTCFullYear();
+      const mes = conta.vencimento.getUTCMonth();
+      const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
+      await this.prisma.contaAPagar.update({
+        where: { id: conta.id },
+        data: {
+          ...(dados.nome && { nome: dados.nome }),
+          ...(dados.diaVencimento && { vencimento: new Date(Date.UTC(ano, mes, Math.min(dados.diaVencimento, ultimoDia))) }),
+          // com código guardado, o valor certo é o do código
+          ...(dados.valorPrevisto && !conta.cobranca && { valor: dados.valorPrevisto }),
+        },
+      });
+    }
+  }
+
+  // Parar de pagar uma conta: some daqui pra frente, o histórico fica.
+  async desativarFixa(id: string) {
+    const fixa = await this.prisma.contaFixa.findUnique({ where: { id } });
+    if (!fixa) throw new NotFoundException('conta fixa não encontrada');
+    await this.prisma.$transaction([
+      this.prisma.contaFixa.update({ where: { id }, data: { ativa: false } }),
+      this.prisma.contaAPagar.deleteMany({
+        where: { contaFixaId: id, pagaEm: null, cobranca: null, vencimento: { gte: intervaloDoMes().inicio } },
+      }),
+    ]);
   }
 
   async criarFixa(dados: NovaContaFixa) {
@@ -89,7 +139,9 @@ class ContasService {
     const ano = inicioDoMes.getFullYear();
     const mes = inicioDoMes.getMonth();
     const ultimoDia = new Date(ano, mes + 1, 0).getDate();
-    const fixas = await this.prisma.contaFixa.findMany({ where: { ativa: true } });
+    // só a partir do mês em que a conta fixa foi criada
+    const fimDoMes = new Date(ano, mes + 1, 1);
+    const fixas = await this.prisma.contaFixa.findMany({ where: { ativa: true, criadaEm: { lt: fimDoMes } } });
 
     await this.prisma.contaAPagar.createMany({
       data: fixas.map((f) => ({
@@ -155,6 +207,18 @@ class ContasController {
   @Get('fixas')
   fixas() {
     return this.contas.fixas();
+  }
+
+  @Patch('fixas/:id')
+  @HttpCode(204)
+  editarFixa(@Param('id') id: string, @Body() dados: EditarContaFixa) {
+    return this.contas.editarFixa(id, dados);
+  }
+
+  @Delete('fixas/:id')
+  @HttpCode(204)
+  desativarFixa(@Param('id') id: string) {
+    return this.contas.desativarFixa(id);
   }
 
   @Post('fixas')

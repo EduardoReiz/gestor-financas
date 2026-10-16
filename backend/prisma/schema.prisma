@@ -183,6 +183,7 @@ model ContaFixa {
   // trecho da descrição no extrato ("EQUATORIAL"): acha o pagamento mesmo
   // quando o valor muda de um mês para o outro
   contem         String?
+  criadaEm       DateTime      @default(now())
   categoriaId    String?
   categoria      Categoria?    @relation(fields: [categoriaId], references: [id])
   ativa          Boolean       @default(true)
