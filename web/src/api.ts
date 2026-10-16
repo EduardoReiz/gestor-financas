@@ -64,6 +64,7 @@ export interface ContaAPagar {
   formaPagamento: string | null
   pagaAutomaticamente: boolean
   temCodigo: boolean
+  estimado: boolean
 }
 
 export interface Cobranca {
@@ -95,6 +96,7 @@ export interface ContaFixa {
   formaPagamento: string
   recebedor: string | null
   contem: string | null
+  valorVariavel: boolean
 }
 
 export interface Receita {
@@ -220,8 +222,14 @@ export const api = {
   categorias: () => pedir<Categoria[]>('/categorias'),
   cartoes: () => pedir<Cartao[]>('/cartoes'),
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
-  novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string; contem?: string }) =>
-    pedir('/contas/fixas', postar(dados)),
+  novaContaFixa: (dados: {
+    nome: string
+    valorPrevisto: number
+    diaVencimento: number
+    formaPagamento: string
+    contem?: string
+    valorVariavel?: boolean
+  }) => pedir('/contas/fixas', postar(dados)),
   planejamento: (mes: string) => pedir<Planejamento>(`/planejamento?mes=${mes}`),
   salvarReceita: (dados: { nome: string; valor: number; dia?: number; contem?: string }, id?: string) =>
     id ? pedir<void>(`/receitas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }) : pedir('/receitas', postar(dados)),
@@ -243,6 +251,8 @@ export const api = {
     pedir<{ id: string; aviso: string | null }>('/cobrancas', postar(dados)),
   marcarCobranca: (id: string, paga: boolean) => pedir<void>(`/cobrancas/${id}`, { method: 'PATCH', body: JSON.stringify({ paga }) }),
   removerCobranca: (id: string) => pedir<void>(`/cobrancas/${id}`, { method: 'DELETE' }),
+  informarValorConta: (id: string, valor: number) =>
+    pedir<void>(`/contas/${id}/valor`, { method: 'PATCH', body: JSON.stringify({ valor }) }),
   marcarConta: (id: string, paga: boolean) => pedir<void>(`/contas/${id}`, { method: 'PATCH', body: JSON.stringify({ paga }) }),
   metas: () => pedir<{ guardadoNoMes: number; metas: Meta[] }>('/metas'),
   novaMeta: (dados: { nome: string; valorAlvo: number; prazo: string }) => pedir('/metas', postar(dados)),

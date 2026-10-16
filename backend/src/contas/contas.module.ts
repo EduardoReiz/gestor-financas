@@ -11,6 +11,7 @@ class NovaContaFixa {
   @IsString() @MaxLength(40) formaPagamento!: string;
   @IsOptional() @IsString() categoriaId?: string;
   @IsOptional() @IsString() @MaxLength(40) contem?: string;
+  @IsOptional() @IsBoolean() valorVariavel?: boolean;
 }
 
 // Na edição tudo é opcional: só muda o que veio.
@@ -20,6 +21,11 @@ class EditarContaFixa {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31) diaVencimento?: number;
   @IsOptional() @IsString() @MaxLength(40) formaPagamento?: string;
   @IsOptional() @IsString() @MaxLength(40) contem?: string;
+  @IsOptional() @IsBoolean() valorVariavel?: boolean;
+}
+
+class ValorDoMes {
+  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() valor!: number;
 }
 
 class MarcarPaga {
@@ -41,10 +47,11 @@ export class ContasService {
     const intervalo = intervaloDoMes(mes);
     await this.gerarOcorrencias(intervalo.inicio);
     await this.ligarPagamentos(intervalo.inicio, intervalo.fim);
+    await this.estimarVariaveis(intervalo.inicio, intervalo.fim);
 
     const contas = await this.prisma.contaAPagar.findMany({
       where: { vencimento: { gte: intervalo.inicio, lt: intervalo.fim } },
-      include: { contaFixa: { select: { formaPagamento: true } }, cobranca: { select: { id: true } } },
+      include: { contaFixa: { select: { formaPagamento: true, valorVariavel: true } }, cobranca: { select: { id: true } } },
       orderBy: { vencimento: 'asc' },
     });
 
@@ -59,6 +66,8 @@ export class ContasService {
       formaPagamento: c.contaFixa?.formaPagamento ?? null,
       pagaAutomaticamente: !!c.lancamentoId,
       temCodigo: !!c.cobranca,
+      // valor ainda é a média dos últimos meses, não o da fatura de verdade
+      estimado: !!c.contaFixa?.valorVariavel && !c.valorInformado && !c.pagaEm,
     });
 
     return {
@@ -73,7 +82,9 @@ export class ContasService {
   fixas() {
     return this.prisma.contaFixa.findMany({
       where: { ativa: true },
-      select: { id: true, nome: true, valorPrevisto: true, diaVencimento: true, formaPagamento: true, recebedor: true, contem: true },
+      select: {
+        id: true, nome: true, valorPrevisto: true, diaVencimento: true, formaPagamento: true, recebedor: true, contem: true, valorVariavel: true,
+      },
       orderBy: [{ diaVencimento: 'asc' }, { nome: 'asc' }],
     });
   }
@@ -101,7 +112,7 @@ export class ContasService {
           ...(dados.nome && { nome: dados.nome }),
           ...(dados.diaVencimento && { vencimento: new Date(Date.UTC(ano, mes, Math.min(dados.diaVencimento, ultimoDia))) }),
           // com código guardado, o valor certo é o do código
-          ...(dados.valorPrevisto && !conta.cobranca && { valor: dados.valorPrevisto }),
+          ...(dados.valorPrevisto && !conta.cobranca && !conta.valorInformado && { valor: dados.valorPrevisto }),
         },
       });
     }
@@ -123,6 +134,13 @@ export class ContasService {
     const fixa = await this.prisma.contaFixa.create({ data: dados });
     await this.gerarOcorrencias(intervaloDoMes().inicio);
     return fixa;
+  }
+
+  // "Informar valor": a fatura fechou e você sabe quanto é este mês.
+  async informarValor(id: string, valor: number) {
+    const conta = await this.prisma.contaAPagar.findUnique({ where: { id } });
+    if (!conta) throw new NotFoundException('conta não encontrada');
+    await this.prisma.contaAPagar.update({ where: { id }, data: { valor, valorInformado: true } });
   }
 
   async marcar(id: string, paga: boolean) {
@@ -155,6 +173,25 @@ export class ContasService {
     });
   }
 
+  // Contas de valor variável sem valor real ainda: média dos últimos 3 meses com valor real.
+  private async estimarVariaveis(inicio: Date, fim: Date) {
+    const abertas = await this.prisma.contaAPagar.findMany({
+      where: { vencimento: { gte: inicio, lt: fim }, pagaEm: null, valorInformado: false, cobranca: null, contaFixa: { valorVariavel: true } },
+    });
+    for (const conta of abertas) {
+      const pagas = await this.prisma.contaAPagar.findMany({
+        // meses com valor real: pagos ou com o valor informado por você
+        where: { contaFixaId: conta.contaFixaId, OR: [{ pagaEm: { not: null } }, { valorInformado: true }], vencimento: { lt: inicio } },
+        orderBy: { vencimento: 'desc' },
+        take: 3,
+        select: { valor: true },
+      });
+      if (pagas.length === 0) continue; // sem histórico: fica o valor de referência
+      const media = pagas.reduce((s, p) => s + p.valor.toNumber(), 0) / pagas.length;
+      await this.prisma.contaAPagar.update({ where: { id: conta.id }, data: { valor: centavos(media) } });
+    }
+  }
+
   // Liga sozinho a conta ao débito do extrato que a pagou.
   private async ligarPagamentos(inicio: Date, fim: Date) {
     const pendentes = await this.prisma.contaAPagar.findMany({
@@ -182,7 +219,7 @@ export class ContasService {
         await this.prisma.contaAPagar.update({
           where: { id: conta.id },
           // o valor da conta passa a ser o que foi pago de verdade
-          data: { pagaEm: pagamento.data, lancamentoId: pagamento.id, valor: pagamento.valor },
+          data: { pagaEm: pagamento.data, lancamentoId: pagamento.id, valor: pagamento.valor, valorInformado: true },
         });
       }
     }
@@ -224,6 +261,12 @@ class ContasController {
   @Post('fixas')
   criarFixa(@Body() dados: NovaContaFixa) {
     return this.contas.criarFixa(dados);
+  }
+
+  @Patch(':id/valor')
+  @HttpCode(204)
+  informarValor(@Param('id') id: string, @Body() dados: ValorDoMes) {
+    return this.contas.informarValor(id, dados.valor);
   }
 
   @Patch(':id')

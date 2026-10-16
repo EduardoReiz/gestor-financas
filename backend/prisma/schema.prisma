@@ -183,6 +183,9 @@ model ContaFixa {
   // trecho da descrição no extrato ("EQUATORIAL"): acha o pagamento mesmo
   // quando o valor muda de um mês para o outro
   contem         String?
+  // fatura de cartão, energia...: o valor do mês é estimado pela média dos
+  // últimos pagamentos até você informar o valor real (ou colar o código)
+  valorVariavel  Boolean       @default(false)
   criadaEm       DateTime      @default(now())
   categoriaId    String?
   categoria      Categoria?    @relation(fields: [categoriaId], references: [id])
@@ -193,18 +196,20 @@ model ContaFixa {
 
 // Cada mês o molde gera uma ocorrência. Contas avulsas não têm molde.
 model ContaAPagar {
-  id           String      @id @default(cuid())
-  contaFixaId  String?
-  contaFixa    ContaFixa?  @relation(fields: [contaFixaId], references: [id])
-  nome         String
-  valor        Decimal     @db.Decimal(12, 2)
-  vencimento   DateTime    @db.Date
-  pagaEm       DateTime?
+  id             String      @id @default(cuid())
+  contaFixaId    String?
+  contaFixa      ContaFixa?  @relation(fields: [contaFixaId], references: [id])
+  nome           String
+  valor          Decimal     @db.Decimal(12, 2)
+  vencimento     DateTime    @db.Date
+  pagaEm         DateTime?
+  // true quando o valor é o real (você informou, veio do código ou foi pago)
+  valorInformado Boolean     @default(false)
   // o lançamento do extrato que pagou esta conta (ligado automaticamente
   // quando valor e data batem, ou por você):
-  lancamentoId String?     @unique
-  lancamento   Lancamento? @relation(fields: [lancamentoId], references: [id])
-  cobranca     Cobranca?
+  lancamentoId   String?     @unique
+  lancamento     Lancamento? @relation(fields: [lancamentoId], references: [id])
+  cobranca       Cobranca?
 
   @@unique([contaFixaId, vencimento])
   @@index([vencimento])

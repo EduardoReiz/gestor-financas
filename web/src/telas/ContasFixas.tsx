@@ -56,7 +56,10 @@ export function ContasFixas({ aoMudar }: { aoMudar: () => void }) {
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
-                    <span className="mr-2 text-[15px] font-semibold">{brl(f.valorPrevisto)}</span>
+                    <span className="mr-2 text-right text-[15px] font-semibold">
+                      {f.valorVariavel ? <span className="block text-xs font-normal text-suave">varia, ~</span> : null}
+                      {brl(f.valorPrevisto)}
+                    </span>
                     <button className="h-10 rounded-[10px] px-3 text-sm font-medium text-floresta" onClick={() => setEditandoId(f.id)}>
                       Editar
                     </button>
@@ -86,6 +89,7 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
   const [dia, setDia] = useState(String(conta?.diaVencimento ?? 10))
   const [forma, setForma] = useState(conta?.formaPagamento ?? 'Pix')
   const [contem, setContem] = useState(conta?.contem ?? '')
+  const [variavel, setVariavel] = useState(conta?.valorVariavel ?? false)
   const [erro, setErro] = useState<string>()
 
   const diaNumero = Number(dia)
@@ -99,6 +103,7 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
       diaVencimento: diaNumero,
       formaPagamento: forma.trim() || 'Pix',
       contem: contem.trim(),
+      valorVariavel: variavel,
     }
     try {
       if (conta) await api.editarContaFixa(conta.id, dados)
@@ -115,7 +120,13 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
       className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end ${conta ? '' : 'rounded-2xl border border-borda bg-white p-4'}`}
     >
       <Campo rotulo="Nome" valor={nome} aoMudar={setNome} placeholder="Ex.: Internet" className="lg:col-span-2" />
-      <Campo rotulo="Valor (R$)" valor={valor} aoMudar={setValor} placeholder="99,90" inputMode="decimal" />
+      <Campo
+        rotulo={variavel ? 'Valor de referência (R$)' : 'Valor (R$)'}
+        valor={valor}
+        aoMudar={setValor}
+        placeholder="99,90"
+        inputMode="decimal"
+      />
       <Campo rotulo="Dia do vencimento" valor={dia} aoMudar={setDia} inputMode="numeric" />
       <Campo rotulo="Como paga" valor={forma} aoMudar={setForma} placeholder="Pix, boleto, débito..." />
       <Campo
@@ -125,6 +136,18 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
         placeholder="Ex.: EQUATORIAL"
         className="sm:col-span-2 lg:col-span-5"
       />
+      <label className="flex cursor-pointer items-start gap-2.5 text-sm sm:col-span-2 lg:col-span-5">
+        <input
+          type="checkbox"
+          className="mt-0.5 size-4.5 accent-floresta"
+          checked={variavel}
+          onChange={(e) => setVariavel(e.target.checked)}
+        />
+        <span>
+          O valor muda todo mês{' '}
+          <span className="text-suave">(fatura de cartão, energia…). O app estima pela média até você informar o valor do mês.</span>
+        </span>
+      </label>
       <div className="flex gap-2 sm:col-span-2 lg:col-span-5">
         <button className={`${botaoPrincipal} flex-1`} disabled={!valido}>
           {conta ? 'Salvar alterações' : 'Salvar conta fixa'}

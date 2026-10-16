@@ -142,8 +142,8 @@ class CobrancasService {
 
     const conta = await this.prisma.contaAPagar.upsert({
       where: chave,
-      create: { contaFixaId, nome: fixa.nome, valor: valor ?? fixa.valorPrevisto, vencimento: venceNoMes },
-      update: { ...(valor !== null && { valor }) },
+      create: { contaFixaId, nome: fixa.nome, valor: valor ?? fixa.valorPrevisto, vencimento: venceNoMes, valorInformado: valor !== null },
+      update: { ...(valor !== null && { valor, valorInformado: true }) },
     });
     return conta.id;
   }
