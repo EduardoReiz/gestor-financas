@@ -293,7 +293,9 @@ export class SincronizacaoService {
       create: { ...destino, ignorarNosTotais: !!destino.ignorarNosTotais, sentido },
       update: {},
     });
-    return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: true };
+    // Pix para uma pessoa sai como "Transferências": só você sabe o que foi
+    // (o aluguel, um empréstimo, a parte de uma conta...). O app pergunta.
+    return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: destino.nome !== 'Transferências' };
   }
 
   // Pix do Sicredi para o Bradesco aparece como saída num banco e entrada no
