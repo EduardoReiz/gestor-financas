@@ -15,6 +15,10 @@ const MAPA: Record<string, Destino> = {
   '04': { nome: 'Entre contas suas', cor: '#C9D2CE', ignorarNosTotais: true },
   '03': { nome: 'Aplicação em investimento', cor: '#C9D2CE', ignorarNosTotais: true },
 
+  '19050001': { nome: 'Combustível', cor: '#3D7EA6' },
+  '19050005': { nome: 'Manutenção do veículo', cor: '#4F6D8A' },
+  '19050004': { nome: 'Taxas e multas do veículo', cor: '#8A5B5B' },
+  '19050006': { nome: 'Taxas e multas do veículo', cor: '#8A5B5B' },
   '1102': { nome: 'Delivery', cor: '#B86E00' },
   '1101': { nome: 'Restaurantes', cor: '#C98A2E' },
   '11': { nome: 'Alimentação', cor: '#C98A2E' },

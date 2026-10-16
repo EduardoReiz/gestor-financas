@@ -14,6 +14,7 @@ import { Contas } from './telas/Contas'
 import { Metas } from './telas/Metas'
 import { Investimentos } from './telas/Investimentos'
 import { Sugestoes } from './telas/Sugestoes'
+import { Planejamento } from './telas/Planejamento'
 
 type Estado = { logado: boolean; primeiroAcesso: boolean }
 
@@ -49,6 +50,7 @@ function App() {
           <Route path="metas" element={<Metas />} />
           <Route path="investimentos" element={<Investimentos />} />
           <Route path="sugestoes" element={<Sugestoes />} />
+          <Route path="planejamento" element={<Planejamento />} />
           <Route path="ajustes" element={<Ajustes aoSair={conferir} />} />
         </Route>
       </Routes>

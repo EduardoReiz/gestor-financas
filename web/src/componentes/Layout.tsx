@@ -7,6 +7,7 @@ const secoes = [
   { para: '/cartoes', nome: 'Cartões', Icone: IconeCartao, naBarra: true },
   { para: '/contas', nome: 'Contas a pagar', curto: 'Contas', Icone: IconeCalendario, naBarra: true },
   { para: '/metas', nome: 'Metas', Icone: IconeAlvo, naBarra: true },
+  { para: '/planejamento', nome: 'Planejamento', Icone: IconeAlvo, naBarra: false },
   { para: '/investimentos', nome: 'Investimentos', Icone: IconeAlvo, naBarra: false },
   { para: '/sugestoes', nome: 'Sugestões', Icone: IconeAlvo, naBarra: false },
   { para: '/ajustes', nome: 'Ajustes', Icone: IconeAlvo, naBarra: false },

@@ -68,6 +68,7 @@ export class SincronizacaoService {
         novos += await this.sincronizarItem(id, banco, regras);
       }
       await this.pareaTransferenciasEntreBancos();
+      await this.marcaPagamentosDeFatura();
       await this.prisma.sincronizacao.update({
         where: { id: registro.id },
         data: { terminadaEm: new Date(), sucesso: true, novos },
@@ -319,6 +320,35 @@ export class SincronizacaoService {
       data: { categoriaId: entreContas.id, origemCategoria: 'REGRA', categoriaConfirmada: true },
     });
     this.log.log(`${pares.length / 2} transferências entre seus bancos marcadas`);
+  }
+
+  // O pagamento da fatura sai da conta corrente e às vezes vem do Pluggy como
+  // "Empréstimos" ou "Transferência". As compras já contaram no cartão, então
+  // um débito com o valor exato de uma fatura, perto do vencimento, sai dos totais.
+  private async marcaPagamentosDeFatura() {
+    const faturas = await this.prisma.fatura.findMany({ where: { total: { gt: 0 } } });
+    const pagamentoDeFatura = await this.prisma.categoria.upsert({
+      where: { nome: 'Pagamento de fatura' },
+      create: { nome: 'Pagamento de fatura', sentido: 'SAIDA', cor: '#C9D2CE', ignorarNosTotais: true },
+      update: {},
+    });
+
+    let marcados = 0;
+    for (const f of faturas) {
+      const { count } = await this.prisma.lancamento.updateMany({
+        where: {
+          sentido: 'SAIDA',
+          valor: f.total,
+          data: { gte: new Date(f.vencimento.getTime() - 10 * DIA), lte: new Date(f.vencimento.getTime() + 3 * DIA) },
+          conta: { tipo: { not: 'CARTAO_CREDITO' } },
+          OR: [{ origemCategoria: null }, { origemCategoria: { not: 'MANUAL' } }],
+          NOT: { categoriaId: pagamentoDeFatura.id },
+        },
+        data: { categoriaId: pagamentoDeFatura.id, origemCategoria: 'REGRA', categoriaConfirmada: true },
+      });
+      marcados += count;
+    }
+    if (marcados) this.log.log(`${marcados} pagamentos de fatura tirados dos totais`);
   }
 
   private async salvarInvestimentos(conexaoId: string, itemId: string) {

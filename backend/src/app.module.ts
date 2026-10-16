@@ -12,6 +12,7 @@ import { InvestimentosModule } from './investimentos/investimentos.module';
 import { SugestoesModule } from './sugestoes/sugestoes.module';
 import { PluggyModule } from './pluggy/pluggy.module';
 import { CobrancasModule } from './cobrancas/cobrancas.module';
+import { PlanejamentoModule } from './planejamento/planejamento.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { CobrancasModule } from './cobrancas/cobrancas.module';
     SugestoesModule,
     PluggyModule,
     CobrancasModule,
+    PlanejamentoModule,
   ],
 })
 export class AppModule {}

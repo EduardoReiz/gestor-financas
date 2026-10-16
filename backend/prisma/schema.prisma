@@ -127,7 +127,7 @@ model Categoria {
   ignorarNosTotais Boolean          @default(false)
   lancamentos      Lancamento[]
   regras           RegraCategoria[]
-  limite           Limite?
+  limites          Limite[]
   contasFixas      ContaFixa[]
   sugestoes        Sugestao[]
 }
@@ -259,12 +259,24 @@ model Aporte {
   data   DateTime @db.Date
 }
 
-// Limite mensal por categoria (o botão "Criar limite" das sugestões).
+// Orçamento do mês: um limite para uma ou mais categorias juntas
+// ("Lazer" = Lazer + Restaurantes + Delivery + Alimentação).
 model Limite {
-  id          String    @id @default(cuid())
-  categoriaId String    @unique
-  categoria   Categoria @relation(fields: [categoriaId], references: [id])
-  valorMensal Decimal   @db.Decimal(12, 2)
+  id          String      @id @default(cuid())
+  nome        String      @unique
+  valorMensal Decimal     @db.Decimal(12, 2)
+  categorias  Categoria[]
+}
+
+// Renda que chega todo mês (salário, bolsa...). Serve para a sobra estimada.
+model Receita {
+  id       String   @id @default(cuid())
+  nome     String
+  valor    Decimal  @db.Decimal(12, 2)
+  dia      Int? // dia em que costuma cair
+  contem   String? // como aparece no extrato, para saber se já caiu
+  ativa    Boolean  @default(true)
+  criadaEm DateTime @default(now())
 }
 
 // ---------- Investimentos ----------

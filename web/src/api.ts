@@ -97,6 +97,30 @@ export interface ContaFixa {
   contem: string | null
 }
 
+export interface Receita {
+  id: string
+  nome: string
+  valor: number
+  dia: number | null
+  contem: string | null
+  recebida: { valor: number; data: string } | null
+}
+
+export interface Orcamento {
+  id: string
+  nome: string
+  valorMensal: number
+  gasto: number
+  categorias: { id: string; nome: string }[]
+}
+
+export interface Planejamento {
+  resumo: { rendaPrevista: number; rendaRecebida: number; contasDoMes: number; faturasCartao: number; sobraEstimada: number }
+  faturas: { banco: string; vencimento: string; total: number }[]
+  receitas: Receita[]
+  orcamentos: Orcamento[]
+}
+
 export interface Contas {
   total: number
   pago: number
@@ -198,6 +222,13 @@ export const api = {
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
   novaContaFixa: (dados: { nome: string; valorPrevisto: number; diaVencimento: number; formaPagamento: string; contem?: string }) =>
     pedir('/contas/fixas', postar(dados)),
+  planejamento: (mes: string) => pedir<Planejamento>(`/planejamento?mes=${mes}`),
+  salvarReceita: (dados: { nome: string; valor: number; dia?: number; contem?: string }, id?: string) =>
+    id ? pedir<void>(`/receitas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }) : pedir('/receitas', postar(dados)),
+  removerReceita: (id: string) => pedir<void>(`/receitas/${id}`, { method: 'DELETE' }),
+  salvarOrcamento: (dados: { nome: string; valorMensal: number; categoriaIds: string[] }, id?: string) =>
+    id ? pedir<void>(`/orcamentos/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }) : pedir('/orcamentos', postar(dados)),
+  removerOrcamento: (id: string) => pedir<void>(`/orcamentos/${id}`, { method: 'DELETE' }),
   contasFixas: () =>
     pedir<(Omit<ContaFixa, 'valorPrevisto'> & { valorPrevisto: string | number })[]>('/contas/fixas').then((fixas) =>
       // o Prisma manda Decimal como texto

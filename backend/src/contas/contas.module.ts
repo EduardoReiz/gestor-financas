@@ -34,7 +34,7 @@ const FOLGA_DIAS = 3;
 const FOLGA_COM_NOME_DIAS = 10;
 
 @Injectable()
-class ContasService {
+export class ContasService {
   constructor(private readonly prisma: PrismaService) {}
 
   async doMes(mes?: string) {
@@ -235,5 +235,6 @@ class ContasController {
 @Module({
   controllers: [ContasController],
   providers: [ContasService],
+  exports: [ContasService],
 })
 export class ContasModule {}

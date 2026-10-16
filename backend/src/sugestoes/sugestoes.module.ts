@@ -60,7 +60,7 @@ export class SugestoesService {
     await this.gerar();
     const sugestoes = await this.prisma.sugestao.findMany({
       where: { status: 'NOVA', criadaEm: { gte: new Date(Date.now() - 40 * DIA) } },
-      include: { categoria: { select: { id: true, nome: true, limite: true } } },
+      include: { categoria: { select: { id: true, nome: true, limites: { select: { valorMensal: true } } } } },
       orderBy: [{ tipo: 'asc' }, { criadaEm: 'desc' }],
     });
 
@@ -74,7 +74,7 @@ export class SugestoesService {
       categoria: s.categoria && {
         id: s.categoria.id,
         nome: s.categoria.nome,
-        limiteAtual: s.categoria.limite?.valorMensal.toNumber() ?? null,
+        limiteAtual: s.categoria.limites[0]?.valorMensal.toNumber() ?? null,
       },
     }));
   }
@@ -85,11 +85,16 @@ export class SugestoesService {
     await this.prisma.sugestao.update({ where: { id }, data: { status } });
   }
 
-  definirLimite(dados: NovoLimite) {
-    return this.prisma.limite.upsert({
-      where: { categoriaId: dados.categoriaId },
-      create: dados,
-      update: { valorMensal: dados.valorMensal },
+  // "Criar limite" numa sugestão: ajusta o orçamento que já cobre a categoria,
+  // ou cria um só para ela.
+  async definirLimite(dados: NovoLimite) {
+    const existente = await this.prisma.limite.findFirst({ where: { categorias: { some: { id: dados.categoriaId } } } });
+    if (existente) {
+      return this.prisma.limite.update({ where: { id: existente.id }, data: { valorMensal: dados.valorMensal } });
+    }
+    const categoria = await this.prisma.categoria.findUniqueOrThrow({ where: { id: dados.categoriaId } });
+    return this.prisma.limite.create({
+      data: { nome: categoria.nome, valorMensal: dados.valorMensal, categorias: { connect: { id: categoria.id } } },
     });
   }
 
@@ -150,22 +155,24 @@ export class SugestoesService {
   private async limitesEstourados(hoje: Date): Promise<Ideia[]> {
     const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const [limites, gastos] = await Promise.all([
-      this.prisma.limite.findMany({ include: { categoria: true } }),
+      this.prisma.limite.findMany({ include: { categorias: { select: { id: true } } } }),
       this.saidasPorCategoria(inicioMes, hoje),
     ]);
-    return limites
-      .filter((l) => (gastos.get(l.categoriaId)?.total ?? 0) > l.valorMensal.toNumber())
-      .map((l) => {
-        const gasto = gastos.get(l.categoriaId)!.total;
-        return {
-          chave: `limite-${l.categoriaId}-${chaveMes(inicioMes)}`,
+    return limites.flatMap((l) => {
+      const gasto = l.categorias.reduce((s, c) => s + (gastos.get(c.id)?.total ?? 0), 0);
+      const limite = l.valorMensal.toNumber();
+      if (gasto <= limite) return [];
+      return [
+        {
+          chave: `limite-${l.id}-${chaveMes(inicioMes)}`,
           tipo: 'ONDE' as const,
-          categoriaId: l.categoriaId,
-          titulo: `Você passou do limite de ${l.categoria.nome}`,
-          texto: `${brl(gasto)} gastos para um limite de ${brl(l.valorMensal.toNumber())} no mês.`,
-          impactoMensal: centavos(gasto - l.valorMensal.toNumber()),
-        };
-      });
+          categoriaId: l.categorias[0]?.id,
+          titulo: `Você passou do orçamento de ${l.nome}`,
+          texto: `${brl(gasto)} gastos para um orçamento de ${brl(limite)} no mês.`,
+          impactoMensal: centavos(gasto - limite),
+        },
+      ];
+    });
   }
 
   // Três ou mais assinaturas diferentes cobradas nos últimos 35 dias.
