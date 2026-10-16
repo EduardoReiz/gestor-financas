@@ -45,8 +45,9 @@ const RENDA: Destino = { nome: 'Renda', cor: '#1F6F4A' };
 const OUTRAS_ENTRADAS: Destino = { nome: 'Outras entradas', cor: '#7FD1A6' };
 
 // O banco não sabe se o abastecimento foi do carro ou da moto (o posto é o
-// mesmo). Pelo histórico, a moto abastece pouco: abaixo disso é moto.
-export const ABASTECIMENTO_MAXIMO_DA_MOTO = 50;
+// mesmo). O padrão da casa: a moto abastece até R$ 30 e o carro, R$ 120.
+export const ABASTECIMENTO_MAXIMO_DA_MOTO = 30;
+export const ABASTECIMENTO_DO_CARRO = 120;
 export const COMBUSTIVEL_CARRO: Destino = { nome: 'Combustível carro', cor: '#3D7EA6' };
 export const COMBUSTIVEL_MOTO: Destino = { nome: 'Combustível moto', cor: '#6FA8C8' };
 
@@ -62,8 +63,13 @@ export function traduzirCategoria(pluggyId: string | null, sentido: Sentido, val
   if (!pluggyId) return null;
   for (const tamanho of [8, 4, 2]) {
     const destino = MAPA[pluggyId.slice(0, tamanho)];
-    if (destino?.nome === 'Combustível') return valor < ABASTECIMENTO_MAXIMO_DA_MOTO ? COMBUSTIVEL_MOTO : COMBUSTIVEL_CARRO;
+    // a moto nunca passa de R$ 30: acima disso é carro (fora dos R$ 120, o app pergunta)
+    if (destino?.nome === 'Combustível') return valor <= ABASTECIMENTO_MAXIMO_DA_MOTO ? COMBUSTIVEL_MOTO : COMBUSTIVEL_CARRO;
     if (destino) return destino;
   }
   return null;
 }
+
+// Abastecimento no padrão (moto até R$ 30, carro R$ 120) não precisa perguntar.
+export const combustivelNoPadrao = (valor: number) =>
+  valor <= ABASTECIMENTO_MAXIMO_DA_MOTO || Math.abs(valor - ABASTECIMENTO_DO_CARRO) < 0.005;

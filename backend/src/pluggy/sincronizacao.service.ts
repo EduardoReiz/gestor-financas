@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Sentido, TipoConta } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { PluggyClient, type PluggyConta } from './pluggy.client';
-import { traduzirCategoria } from './categorias';
+import { combustivelNoPadrao, traduzirCategoria } from './categorias';
 
 const DIA = 86_400_000;
 const soData = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
@@ -296,8 +296,8 @@ export class SincronizacaoService {
     });
     // Pix para uma pessoa sai como "Transferências": só você sabe o que foi
     // (o aluguel, um empréstimo, a parte de uma conta...). O app pergunta.
-    // perguntar quando o app está chutando: Pix para pessoa e carro/moto pelo valor
-    const chute = destino.nome === 'Transferências' || destino.nome.startsWith('Combustível');
+    // perguntar quando o app está chutando: Pix para pessoa, e combustível fora do padrão
+    const chute = destino.nome === 'Transferências' || (destino.nome.startsWith('Combustível') && !combustivelNoPadrao(valor));
     return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: !chute };
   }
 
