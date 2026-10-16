@@ -1,0 +1,32 @@
+# No servidor:  docker compose -f docker-compose.prod.yml up -d --build
+# Segredos em .env.prod (fora do git). O app só escuta em 127.0.0.1:3100;
+# quem leva até ele, com HTTPS, é o "tailscale serve".
+services:
+  banco:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gestor_financas
+      POSTGRES_USER: gestor
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env.prod}
+    volumes:
+      - dados_banco:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gestor -d gestor_financas"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      DATABASE_URL: postgresql://gestor:${POSTGRES_PASSWORD}@banco:5432/gestor_financas
+    ports:
+      - "127.0.0.1:3100:3100"
+    depends_on:
+      banco:
+        condition: service_healthy
+
+volumes:
+  dados_banco:
