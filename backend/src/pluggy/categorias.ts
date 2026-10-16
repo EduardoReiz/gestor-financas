@@ -20,7 +20,7 @@ const MAPA: Record<string, Destino> = {
   '19050004': { nome: 'Taxas e multas do veículo', cor: '#8A5B5B' },
   '19050006': { nome: 'Taxas e multas do veículo', cor: '#8A5B5B' },
   '1102': { nome: 'Delivery', cor: '#B86E00' },
-  '1101': { nome: 'Restaurantes', cor: '#C98A2E' },
+  '1101': { nome: 'Lanche', cor: '#C98A2E' }, // restaurantes, bares e lanchonetes
   '11': { nome: 'Alimentação', cor: '#C98A2E' },
   '10': { nome: 'Mercado', cor: '#2E8B5E' },
   '09': { nome: 'Assinaturas', cor: '#A64D79' },
@@ -44,8 +44,14 @@ const MAPA: Record<string, Destino> = {
 const RENDA: Destino = { nome: 'Renda', cor: '#1F6F4A' };
 const OUTRAS_ENTRADAS: Destino = { nome: 'Outras entradas', cor: '#7FD1A6' };
 
+// O banco não sabe se o abastecimento foi do carro ou da moto (o posto é o
+// mesmo). Pelo histórico, a moto abastece pouco: abaixo disso é moto.
+export const ABASTECIMENTO_MAXIMO_DA_MOTO = 50;
+export const COMBUSTIVEL_CARRO: Destino = { nome: 'Combustível carro', cor: '#3D7EA6' };
+export const COMBUSTIVEL_MOTO: Destino = { nome: 'Combustível moto', cor: '#6FA8C8' };
+
 // Devolve a categoria do app (ou null: "sem categoria", o app pergunta).
-export function traduzirCategoria(pluggyId: string | null, sentido: Sentido): Destino | null {
+export function traduzirCategoria(pluggyId: string | null, sentido: Sentido, valor = 0): Destino | null {
   if (sentido === 'ENTRADA') {
     if (pluggyId?.startsWith('01')) return RENDA;
     const especial = pluggyId && ['05100000', '04', '03'].find((p) => pluggyId.startsWith(p));
@@ -56,6 +62,7 @@ export function traduzirCategoria(pluggyId: string | null, sentido: Sentido): De
   if (!pluggyId) return null;
   for (const tamanho of [8, 4, 2]) {
     const destino = MAPA[pluggyId.slice(0, tamanho)];
+    if (destino?.nome === 'Combustível') return valor < ABASTECIMENTO_MAXIMO_DA_MOTO ? COMBUSTIVEL_MOTO : COMBUSTIVEL_CARRO;
     if (destino) return destino;
   }
   return null;

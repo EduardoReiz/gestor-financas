@@ -26,7 +26,8 @@ export interface Lancamento {
   descricaoOriginal: string
   valor: number
   sentido: Sentido
-  categoria: { id: string; nome: string } | null
+  categoria: { id: string; nome: string; foraDosTotais: boolean } | null
+  origemCategoria: 'PLUGGY' | 'REGRA' | 'MANUAL' | 'CONTA_FIXA' | null
   categoriaConfirmada: boolean
   conta: { id: string; banco: string; tipo: 'CORRENTE' | 'POUPANCA' | 'CARTAO_CREDITO' }
   parcela: string | null

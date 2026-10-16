@@ -254,7 +254,7 @@ export class SincronizacaoService {
       const existente = existentes.get(l.id);
       // categoria escolhida na mão (ou a da conta fixa que ele pagou) nunca é trocada
       const fixa = existente?.origemCategoria === 'MANUAL' || existente?.origemCategoria === 'CONTA_FIXA';
-      const categoria = fixa ? null : await this.categoriaPara(l.description, l.categoryId, sentido, regras);
+      const categoria = fixa ? null : await this.categoriaPara(l.description, l.categoryId, sentido, regras, Math.abs(l.amount));
 
       if (existente) {
         await this.prisma.lancamento.update({
@@ -281,11 +281,12 @@ export class SincronizacaoService {
     pluggyId: string | null,
     sentido: Sentido,
     regras: { contem: string; categoriaId: string }[],
+    valor: number,
   ) {
     const regra = regras.find((r) => descricao.toLowerCase().includes(r.contem.toLowerCase()));
     if (regra) return { categoriaId: regra.categoriaId, origemCategoria: 'REGRA' as const, categoriaConfirmada: true };
 
-    const destino = traduzirCategoria(pluggyId, sentido);
+    const destino = traduzirCategoria(pluggyId, sentido, valor);
     if (!destino) return null;
 
     const categoria = await this.prisma.categoria.upsert({
@@ -295,7 +296,9 @@ export class SincronizacaoService {
     });
     // Pix para uma pessoa sai como "Transferências": só você sabe o que foi
     // (o aluguel, um empréstimo, a parte de uma conta...). O app pergunta.
-    return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: destino.nome !== 'Transferências' };
+    // perguntar quando o app está chutando: Pix para pessoa e carro/moto pelo valor
+    const chute = destino.nome === 'Transferências' || destino.nome.startsWith('Combustível');
+    return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: !chute };
   }
 
   // Pix do Sicredi para o Bradesco aparece como saída num banco e entrada no

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { api, useApi, type Categoria, type Limite } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { BotaoAdicionar, Campo, botaoPrincipal } from '../componentes/Formulario'
@@ -44,6 +45,14 @@ export function Limites() {
               disso ainda não entrou.
             </p>
           )}
+
+          <Link to="/classificar" className="flex items-center justify-between rounded-2xl border border-borda bg-white p-4 text-sm">
+            <span>
+              <b>Classificar gastos</b>
+              <span className="block text-suave">Separe o que é mercado, lanche, lazer, carro e moto</span>
+            </span>
+            <span className="font-semibold text-floresta">Abrir</span>
+          </Link>
 
           {dados.limites.length === 0 && (
             <p className="rounded-2xl border border-borda bg-white p-4 text-sm text-suave">Nenhum limite ainda. Toque no + para criar.</p>

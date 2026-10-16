@@ -16,6 +16,7 @@ import { Investimentos } from './telas/Investimentos'
 import { Sugestoes } from './telas/Sugestoes'
 import { Planejamento } from './telas/Planejamento'
 import { Limites } from './telas/Limites'
+import { Classificar } from './telas/Classificar'
 import { EnviarBoletos } from './telas/EnviarBoletos'
 
 type Estado = Awaited<ReturnType<typeof auth.estado>>
@@ -61,6 +62,7 @@ function App() {
           <Route path="sugestoes" element={<Sugestoes />} />
           <Route path="planejamento" element={<Planejamento />} />
           <Route path="limites" element={<Limites />} />
+          <Route path="classificar" element={<Classificar />} />
           <Route path="ajustes" element={<Ajustes aoSair={conferir} />} />
         </Route>
       </Routes>

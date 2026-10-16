@@ -55,3 +55,19 @@ export const paraNumero = (texto: string) =>
       .replace(/\.(?=\d{3}(\D|$))/g, '') // ponto de milhar
       .replace(',', '.'),
   )
+
+// O "lugar" de uma compra, sem o ruído que cada banco põe na descrição:
+//   "CARTAO DEBITO|ELDORADO SABORES - BR"            -> "ELDORADO SABORES"
+//   "PAGAMENTO PIX|71400502101 JOYCE MACHADO OLIVEI" -> "JOYCE MACHADO OLIVEI"
+//   "AUTO POSTO AMERICA LTD"                          -> "AUTO POSTO AMERICA"
+export const lugarDaCompra = (descricao: string) =>
+  descricao
+    .toUpperCase()
+    .replace(/^[A-Z ]+\|\s*/, '') // "CARTAO DEBITO|", "PAGAMENTO PIX|"
+    .replace(/^PIX (QR CODE \w+|ENVIADO) - DES\s+/, '')
+    .replace(/^\d{6,}\s+/, '') // CPF/CNPJ na frente
+    .replace(/\s+-\s+(DOCTO|BR)\b.*$/, '')
+    .replace(/\s+\d{2}\/\d{2}.*$/, '') // data no fim
+    .replace(/\b(LTDA?|S\/?A|ME|EIRELI)\b\.?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()

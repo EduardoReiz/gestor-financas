@@ -36,7 +36,8 @@ export class LancamentosService {
       descricaoOriginal: l.descricao,
       valor: l.valor.toNumber(),
       sentido: l.sentido,
-      categoria: l.categoria && { id: l.categoria.id, nome: l.categoria.nome },
+      categoria: l.categoria && { id: l.categoria.id, nome: l.categoria.nome, foraDosTotais: l.categoria.ignorarNosTotais },
+      origemCategoria: l.origemCategoria,
       categoriaConfirmada: l.categoriaConfirmada,
       conta: {
         id: l.conta.id,
@@ -74,14 +75,18 @@ export class LancamentosService {
       if (!dados.aplicarAosProximos) return { ajustados: 1 };
 
       const contem = dados.contem!.trim();
+      // a regra nova substitui a antiga do mesmo lugar (senão as duas brigam)
+      await tx.regraCategoria.deleteMany({ where: { contem: { equals: contem, mode: 'insensitive' } } });
       await tx.regraCategoria.create({ data: { contem, categoriaId: dados.categoriaId } });
+      // vale para tudo desse lugar, passado e futuro, menos o que você
+      // escolheu na mão e os pagamentos de contas fixas
       const { count } = await tx.lancamento.updateMany({
         where: {
           id: { not: id },
-          categoriaConfirmada: false,
           descricao: { contains: contem, mode: 'insensitive' },
+          OR: [{ origemCategoria: null }, { origemCategoria: { in: ['PLUGGY', 'REGRA'] } }],
         },
-        data: { categoriaId: dados.categoriaId, origemCategoria: 'REGRA' },
+        data: { categoriaId: dados.categoriaId, origemCategoria: 'REGRA', categoriaConfirmada: true },
       });
       return { ajustados: count + 1 };
     });
