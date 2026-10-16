@@ -36,6 +36,9 @@ class CartoesService {
         final: c.numeroFinal,
         limite,
         usoDoLimite: limite ? total / limite : null,
+        // o que o banco diz: inclui parcelas futuras e compras que ainda não chegaram aqui
+        usadoNoBanco: c.usado?.toNumber() ?? null,
+        disponivel: c.limiteDisponivel?.toNumber() ?? null,
         fatura: fatura && {
           id: fatura.id,
           total,

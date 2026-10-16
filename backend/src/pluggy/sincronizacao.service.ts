@@ -47,10 +47,24 @@ export class SincronizacaoService {
     private readonly pluggy: PluggyClient,
   ) {}
 
-  // O Meu Pluggy atualiza os bancos uma vez por dia, de madrugada.
-  @Cron('0 6 * * *', { timeZone: 'America/Sao_Paulo' })
-  async todoDia() {
-    if (this.pluggy.configurado && itensConfigurados().length) await this.sincronizar();
+  // O Meu Pluggy atualiza cada banco uma vez por dia, mas não num horário fixo
+  // (o Sicredi atualiza perto das 11h). Então, de hora em hora, pergunta ao
+  // Pluggy se algum banco tem dado novo e só aí sincroniza.
+  @Cron('20 * * * *', { timeZone: 'America/Sao_Paulo' })
+  async deHoraEmHora() {
+    if (!this.pluggy.configurado || this.rodando) return;
+    for (const { id } of itensConfigurados()) {
+      const [item, conexao] = await Promise.all([
+        this.pluggy.item(id).catch(() => null),
+        this.prisma.conexao.findUnique({ where: { pluggyItemId: id } }),
+      ]);
+      const novo = item?.lastUpdatedAt && (!conexao?.sincronizadaEm || new Date(item.lastUpdatedAt) > conexao.sincronizadaEm);
+      if (novo) {
+        this.log.log(`banco com dado novo (${conexao?.banco ?? id}): sincronizando`);
+        await this.sincronizar().catch(() => undefined); // o erro já fica registrado
+        return;
+      }
+    }
   }
 
   async sincronizar() {
@@ -124,6 +138,9 @@ export class SincronizacaoService {
       // no cartão o "saldo" é a dívida; quem mostra isso é a fatura
       saldo: tipo === 'CARTAO_CREDITO' ? 0 : c.balance,
       limite: cartao?.creditLimit || null, // alguns cartões vêm com limite 0
+      // no cartão: quanto o banco diz que está usado e quanto ainda tem de limite
+      usado: tipo === 'CARTAO_CREDITO' ? Math.abs(c.balance) : null,
+      limiteDisponivel: tipo === 'CARTAO_CREDITO' && cartao?.creditLimit ? (cartao.availableCreditLimit ?? null) : null,
       // só sobrescreve os dias quando o banco manda; senão vale o que você corrigiu
       ...(cartao?.balanceCloseDate && { diaFechamento: Number(cartao.balanceCloseDate.slice(8, 10)) }),
       ...(cartao?.balanceDueDate && { diaVencimento: Number(cartao.balanceDueDate.slice(8, 10)) }),
@@ -235,8 +252,9 @@ export class SincronizacaoService {
       };
 
       const existente = existentes.get(l.id);
-      // categoria que você escolheu na mão nunca é trocada pela sincronização
-      const categoria = existente?.origemCategoria === 'MANUAL' ? null : await this.categoriaPara(l.description, l.categoryId, sentido, regras);
+      // categoria escolhida na mão (ou a da conta fixa que ele pagou) nunca é trocada
+      const fixa = existente?.origemCategoria === 'MANUAL' || existente?.origemCategoria === 'CONTA_FIXA';
+      const categoria = fixa ? null : await this.categoriaPara(l.description, l.categoryId, sentido, regras);
 
       if (existente) {
         await this.prisma.lancamento.update({
@@ -286,7 +304,7 @@ export class SincronizacaoService {
     const candidatos = await this.prisma.lancamento.findMany({
       where: {
         conta: { tipo: { not: 'CARTAO_CREDITO' } },
-        OR: [{ origemCategoria: null }, { origemCategoria: { not: 'MANUAL' } }],
+        OR: [{ origemCategoria: null }, { origemCategoria: { notIn: ['MANUAL', 'CONTA_FIXA'] } }],
       },
       select: { id: true, data: true, valor: true, sentido: true, conta: { select: { conexaoId: true } } },
       orderBy: { data: 'asc' },
@@ -341,7 +359,7 @@ export class SincronizacaoService {
           valor: f.total,
           data: { gte: new Date(f.vencimento.getTime() - 10 * DIA), lte: new Date(f.vencimento.getTime() + 3 * DIA) },
           conta: { tipo: { not: 'CARTAO_CREDITO' } },
-          OR: [{ origemCategoria: null }, { origemCategoria: { not: 'MANUAL' } }],
+          OR: [{ origemCategoria: null }, { origemCategoria: { notIn: ['MANUAL', 'CONTA_FIXA'] } }],
           NOT: { categoriaId: pagamentoDeFatura.id },
         },
         data: { categoriaId: pagamentoDeFatura.id, origemCategoria: 'REGRA', categoriaConfirmada: true },

@@ -53,6 +53,7 @@ export function ContasFixas({ aoMudar }: { aoMudar: () => void }) {
                     <span className="text-[13px] text-suave">
                       dia {f.diaVencimento} · {f.formaPagamento}
                       {f.contem && ` · no extrato: ${f.contem}`}
+                      {f.categoria && ` · ${f.categoria.nome}`}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
@@ -90,6 +91,8 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
   const [forma, setForma] = useState(conta?.formaPagamento ?? 'Pix')
   const [contem, setContem] = useState(conta?.contem ?? '')
   const [variavel, setVariavel] = useState(conta?.valorVariavel ?? false)
+  const [categoriaId, setCategoriaId] = useState(conta?.categoria?.id ?? '')
+  const { dados: categorias = [] } = useApi(api.categorias, [])
   const [erro, setErro] = useState<string>()
 
   const diaNumero = Number(dia)
@@ -104,6 +107,7 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
       formaPagamento: forma.trim() || 'Pix',
       contem: contem.trim(),
       valorVariavel: variavel,
+      categoriaId: categoriaId || undefined,
     }
     try {
       if (conta) await api.editarContaFixa(conta.id, dados)
@@ -136,6 +140,23 @@ function FormContaFixa({ conta, aoSalvar, aoCancelar }: { conta?: ContaFixa; aoS
         placeholder="Ex.: EQUATORIAL"
         className="sm:col-span-2 lg:col-span-5"
       />
+      <label className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-5">
+        <span className="text-[13px] text-suave">Categoria do gasto (o Pix desta conta conta nela, e não em "Transferências")</span>
+        <select
+          className="h-11 rounded-xl border border-borda-forte bg-white px-3 text-[15px]"
+          value={categoriaId}
+          onChange={(e) => setCategoriaId(e.target.value)}
+        >
+          <option value="">Sem categoria</option>
+          {categorias
+            .filter((c) => c.sentido === 'SAIDA')
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nome}
+              </option>
+            ))}
+        </select>
+      </label>
       <label className="flex cursor-pointer items-start gap-2.5 text-sm sm:col-span-2 lg:col-span-5">
         <input
           type="checkbox"

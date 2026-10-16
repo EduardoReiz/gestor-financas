@@ -19,7 +19,12 @@ export function Cartoes() {
 
       <div className="mb-4 flex flex-col gap-3 lg:mb-5 lg:flex-row lg:gap-4">
         {/* celular: abas compactas */}
-        <div role="tablist" aria-label="Escolher cartão" className="grid gap-1 rounded-xl bg-[#E3E8E6] p-1 lg:hidden" style={{ gridTemplateColumns: `repeat(${cartoes.length}, minmax(0, 1fr))` }}>
+        <div
+          role="tablist"
+          aria-label="Escolher cartão"
+          className="grid gap-1 rounded-xl bg-[#E3E8E6] p-1 lg:hidden"
+          style={{ gridTemplateColumns: `repeat(${cartoes.length}, minmax(0, 1fr))` }}
+        >
           {cartoes.map((c) => (
             <button
               key={c.id}
@@ -76,7 +81,9 @@ export function Cartoes() {
               <span className="flex flex-1 flex-col gap-1.5">
                 <span className="flex flex-col">
                   <span className="text-[15px] font-medium">{legivel(p.descricao)}</span>
-                  <span className="text-[13px] text-suave">parcela {p.parcelaAtual} de {p.parcelasTotal}</span>
+                  <span className="text-[13px] text-suave">
+                    parcela {p.parcelaAtual} de {p.parcelasTotal}
+                  </span>
                 </span>
                 <div className="max-w-56">
                   <Barra fracao={p.parcelaAtual / p.parcelasTotal} altura="h-1.5" />
@@ -100,15 +107,33 @@ function CartaoGrande({ cartao, destaque = true, className = '' }: { cartao: Tip
       } ${className}`}
     >
       <div className={`flex justify-between text-sm ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>
-        <span>{cartao.banco}{cartao.final && ` · final ${cartao.final}`}</span>
+        <span>
+          {cartao.banco}
+          {cartao.final && ` · final ${cartao.final}`}
+        </span>
         {cartao.fatura && <span>vence {diaMes(cartao.fatura.vencimento)}</span>}
       </div>
-      <span className="font-titulo text-[34px] font-bold lg:text-[28px]">{brl(cartao.fatura?.total ?? 0)}</span>
-      {cartao.usoDoLimite !== null && cartao.limite && (
+      <span className="flex flex-col">
+        <span className={`text-[13px] ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>Fatura atual</span>
+        <span className="font-titulo text-[34px] leading-tight font-bold lg:text-[28px]">{brl(cartao.fatura?.total ?? 0)}</span>
+      </span>
+      {cartao.limite && (
         <div className="flex flex-col gap-1.5">
-          <Barra fracao={cartao.usoDoLimite} cor={escuro ? 'bg-broto' : 'bg-floresta'} />
-          <span className={`text-[13px] ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>
-            {Math.round(cartao.usoDoLimite * 100)}% do limite de {brl(cartao.limite)}
+          {/* o limite que o banco informa é o que vale: inclui parcelas futuras e compras recentes */}
+          <Barra
+            fracao={cartao.usadoNoBanco !== null ? cartao.usadoNoBanco / cartao.limite : (cartao.usoDoLimite ?? 0)}
+            cor={escuro ? 'bg-broto' : 'bg-floresta'}
+          />
+          <span className={`flex justify-between gap-2 text-[13px] ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>
+            <span>
+              {cartao.usadoNoBanco !== null
+                ? `${brl(cartao.usadoNoBanco)} usados`
+                : `${Math.round((cartao.usoDoLimite ?? 0) * 100)}% usado`}{' '}
+              de {brl(cartao.limite)}
+            </span>
+            {cartao.disponivel !== null && (
+              <span className={`font-semibold ${escuro ? 'text-broto' : 'text-floresta'}`}>{brl(cartao.disponivel)} livres</span>
+            )}
           </span>
         </div>
       )}
@@ -120,7 +145,9 @@ function Data({ rotulo, dia, explica, verde = false }: { rotulo: string; dia: st
   return (
     <div
       className={`flex flex-col gap-0.5 rounded-[14px] p-3 lg:rounded-none lg:border-t-4 lg:bg-transparent lg:p-0 lg:pt-2.5 ${
-        verde ? 'bg-floresta-clara text-floresta-escura lg:border-floresta' : 'border border-borda bg-white lg:border-x-0 lg:border-b-0 lg:border-suave'
+        verde
+          ? 'bg-floresta-clara text-floresta-escura lg:border-floresta'
+          : 'border border-borda bg-white lg:border-x-0 lg:border-b-0 lg:border-suave'
       }`}
     >
       <span className={`text-xs lg:text-[13px] ${verde ? 'font-semibold' : 'text-suave'}`}>{rotulo}</span>

@@ -93,20 +93,22 @@ enum TipoConta {
 
 // Conta corrente, poupança ou cartão. Cartão também é "conta" no Pluggy.
 model Conta {
-  id              String       @id @default(cuid())
-  conexaoId       String
-  conexao         Conexao      @relation(fields: [conexaoId], references: [id])
-  pluggyAccountId String       @unique
-  tipo            TipoConta
-  nome            String
-  numeroFinal     String? // "4821"
-  saldo           Decimal      @db.Decimal(12, 2)
+  id               String       @id @default(cuid())
+  conexaoId        String
+  conexao          Conexao      @relation(fields: [conexaoId], references: [id])
+  pluggyAccountId  String       @unique
+  tipo             TipoConta
+  nome             String
+  numeroFinal      String? // "4821"
+  saldo            Decimal      @db.Decimal(12, 2)
   // só para cartão:
-  limite          Decimal?     @db.Decimal(12, 2)
-  diaFechamento   Int?
-  diaVencimento   Int?
-  lancamentos     Lancamento[]
-  faturas         Fatura[]
+  limite           Decimal?     @db.Decimal(12, 2)
+  usado            Decimal?     @db.Decimal(12, 2) // o que o banco diz que está usado do limite
+  limiteDisponivel Decimal?     @db.Decimal(12, 2)
+  diaFechamento    Int?
+  diaVencimento    Int?
+  lancamentos      Lancamento[]
+  faturas          Fatura[]
 }
 
 model Fatura {
@@ -135,6 +137,7 @@ enum OrigemCategoria {
   PLUGGY // categoria que o próprio Pluggy sugeriu
   REGRA // uma RegraCategoria criada a partir de uma correção sua
   MANUAL // você escolheu na mão
+  CONTA_FIXA // pagou uma conta fixa: vale a categoria da conta (aluguel, faculdade...)
 }
 
 model Categoria {

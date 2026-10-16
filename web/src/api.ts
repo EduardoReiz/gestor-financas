@@ -45,6 +45,8 @@ export interface Cartao {
   final: string | null
   limite: number | null
   usoDoLimite: number | null
+  usadoNoBanco: number | null
+  disponivel: number | null
   fatura: {
     id: string
     total: number
@@ -109,6 +111,7 @@ export interface ContaFixa {
   recebedor: string | null
   contem: string | null
   valorVariavel: boolean
+  categoria: { id: string; nome: string } | null
 }
 
 export interface Receita {
@@ -129,10 +132,32 @@ export interface Orcamento {
 }
 
 export interface Planejamento {
-  resumo: { rendaPrevista: number; rendaRecebida: number; contasDoMes: number; faturasCartao: number; sobraEstimada: number }
-  faturas: { banco: string; vencimento: string; total: number }[]
+  mesAtual: boolean
+  sobra: { saldoHoje: number; aReceber: number; contasEmAberto: number; faturaNoMes: number; sobraEstimada: number }
+  detalhes: {
+    aReceber: { nome: string; valor: number; dia: number | null }[]
+    foraDasContas: { nome: string; valor: number; dia: number | null }[]
+    contasEmAberto: { nome: string; valor: number; vencimento: string; estimado: boolean }[]
+    faturaNoMes: { banco: string; vencimento: string; total: number }[]
+    faturaSeguinte: { banco: string; fechamento: string; vencimento: string; total: number }[]
+    cartoes: { banco: string; final: string | null; limite: number; usado: number | null; disponivel: number | null }[]
+  }
   receitas: Receita[]
-  orcamentos: Orcamento[]
+}
+
+export interface Limite extends Orcamento {
+  resta: number
+  fracao: number
+  porDia: number | null
+  projecao: number | null
+  situacao: 'ok' | 'atencao' | 'estourou'
+}
+
+export interface Limites {
+  diasNoMes: number
+  diasRestantes: number
+  comprasDoCartaoAte: string | null
+  limites: Limite[]
 }
 
 export interface Contas {
@@ -249,6 +274,7 @@ export const api = {
     valorVariavel?: boolean
   }) => pedir('/contas/fixas', postar(dados)),
   planejamento: (mes: string) => pedir<Planejamento>(`/planejamento?mes=${mes}`),
+  limites: (mes: string) => pedir<Limites>(`/limites?mes=${mes}`),
   salvarReceita: (dados: { nome: string; valor: number; dia?: number; contem?: string }, id?: string) =>
     id ? pedir<void>(`/receitas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }) : pedir('/receitas', postar(dados)),
   removerReceita: (id: string) => pedir<void>(`/receitas/${id}`, { method: 'DELETE' }),
@@ -260,7 +286,7 @@ export const api = {
       // o Prisma manda Decimal como texto
       fixas.map((f) => ({ ...f, valorPrevisto: Number(f.valorPrevisto) }) as ContaFixa),
     ),
-  editarContaFixa: (id: string, dados: Partial<Omit<ContaFixa, 'id' | 'recebedor'>>) =>
+  editarContaFixa: (id: string, dados: Partial<Omit<ContaFixa, 'id' | 'recebedor' | 'categoria'>> & { categoriaId?: string }) =>
     pedir<void>(`/contas/fixas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }),
   desativarContaFixa: (id: string) => pedir<void>(`/contas/fixas/${id}`, { method: 'DELETE' }),
   cobrancas: () => pedir<Cobranca[]>('/cobrancas'),

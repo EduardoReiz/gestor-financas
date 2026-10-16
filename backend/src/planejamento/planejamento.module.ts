@@ -32,35 +32,119 @@ class PlanejamentoService {
     private readonly contas: ContasService,
   ) {}
 
-  // Tudo o que a tela Planejamento mostra, e a sobra estimada do mês:
-  // renda prevista − contas do mês − faturas de cartão que vencem no mês.
+  // A sobra do mês parte do dinheiro que existe HOJE, não da renda do mês
+  // inteiro (senão o que você já gastou no Pix e no débito some da conta):
+  //
+  //   saldo de hoje nas contas conectadas
+  // + renda que ainda vai cair neste mês
+  // − contas do mês que ainda não foram pagas
+  // − fatura do cartão que ainda vence neste mês
+  // = quanto sobra no fim do mês, se nada mais for gasto
+  //
+  // A fatura que está correndo (vence no mês que vem) aparece à parte: ela
+  // sai do dinheiro do mês que vem.
   async doMes(mes?: string) {
     const { inicio, fim } = intervaloDoMes(mes);
-    const [receitas, orcamentos, contasDoMes, faturas] = await Promise.all([
+    const hoje = new Date();
+    const inicioDeHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    const mesAtual = hoje >= inicio && hoje < fim;
+
+    const [receitas, contasDoMes, contas, faturas] = await Promise.all([
       this.receitasDoMes(inicio, fim),
-      this.orcamentosDoMes(inicio, fim),
       this.contas.doMes(mes),
+      this.prisma.conta.findMany({ include: { conexao: { select: { banco: true } } } }),
       this.prisma.fatura.findMany({
-        where: { vencimento: { gte: inicio, lt: fim } },
+        where: { paga: false },
         include: { conta: { include: { conexao: { select: { banco: true } } } } },
+        orderBy: { vencimento: 'asc' },
       }),
     ]);
 
-    const rendaPrevista = centavos(receitas.reduce((s, r) => s + r.valor, 0));
-    const rendaRecebida = centavos(receitas.reduce((s, r) => s + (r.recebida?.valor ?? 0), 0));
-    const faturasCartao = centavos(faturas.reduce((s, f) => s + f.total.toNumber(), 0));
+    const saldoHoje = centavos(contas.filter((c) => c.tipo !== 'CARTAO_CREDITO').reduce((s, c) => s + c.saldo.toNumber(), 0));
+    // renda que ainda vai cair: não caiu e o dia ainda não passou
+    const aReceber = receitas.filter((r) => !r.recebida && (!mesAtual || r.dia === null || r.dia > hoje.getDate()));
+    // receita sem nome no extrato e com o dia já passado: caiu numa conta não conectada (Santander)
+    const foraDasContas = receitas.filter((r) => !r.recebida && !r.contem && mesAtual && r.dia !== null && r.dia <= hoje.getDate());
+    const faturaNoMes = faturas.filter((f) => f.vencimento >= inicioDeHoje && f.vencimento < fim);
+    const faturaSeguinte = faturas.filter((f) => f.vencimento >= fim);
+
+    const totalAReceber = centavos(aReceber.reduce((s, r) => s + r.valor, 0));
+    const totalFaturaNoMes = centavos(faturaNoMes.reduce((s, f) => s + f.total.toNumber(), 0));
+
+    const cartoes = contas
+      .filter((c) => c.tipo === 'CARTAO_CREDITO' && c.limite)
+      .map((c) => ({
+        banco: c.conexao.banco,
+        final: c.numeroFinal,
+        limite: c.limite!.toNumber(),
+        usado: c.usado?.toNumber() ?? null,
+        disponivel: c.limiteDisponivel?.toNumber() ?? null,
+      }));
 
     return {
-      resumo: {
-        rendaPrevista,
-        rendaRecebida,
-        contasDoMes: contasDoMes.total,
-        faturasCartao,
-        sobraEstimada: centavos(rendaPrevista - contasDoMes.total - faturasCartao),
+      mesAtual,
+      sobra: {
+        saldoHoje,
+        aReceber: totalAReceber,
+        contasEmAberto: contasDoMes.falta,
+        faturaNoMes: totalFaturaNoMes,
+        sobraEstimada: centavos(saldoHoje + totalAReceber - contasDoMes.falta - totalFaturaNoMes),
       },
-      faturas: faturas.map((f) => ({ banco: f.conta.conexao.banco, vencimento: f.vencimento, total: f.total.toNumber() })),
+      detalhes: {
+        aReceber: aReceber.map((r) => ({ nome: r.nome, valor: r.valor, dia: r.dia })),
+        foraDasContas: foraDasContas.map((r) => ({ nome: r.nome, valor: r.valor, dia: r.dia })),
+        contasEmAberto: contasDoMes.aVencer.map((c) => ({ nome: c.nome, valor: c.valor, vencimento: c.vencimento, estimado: c.estimado })),
+        faturaNoMes: faturaNoMes.map((f) => ({ banco: f.conta.conexao.banco, vencimento: f.vencimento, total: f.total.toNumber() })),
+        faturaSeguinte: faturaSeguinte.map((f) => ({
+          banco: f.conta.conexao.banco,
+          fechamento: f.fechamento,
+          vencimento: f.vencimento,
+          total: f.total.toNumber(),
+        })),
+        cartoes,
+      },
       receitas,
-      orcamentos,
+    };
+  }
+
+  // Quanto já foi gasto de cada limite, quanto resta e quanto dá por dia.
+  async limites(mes?: string) {
+    const { inicio, fim } = intervaloDoMes(mes);
+    const hoje = new Date();
+    const diasNoMes = Math.round((fim.getTime() - inicio.getTime()) / 86_400_000);
+    const mesAtual = hoje >= inicio && hoje < fim;
+    const diaDeHoje = mesAtual ? hoje.getDate() : hoje < inicio ? 0 : diasNoMes;
+    const diasRestantes = mesAtual ? diasNoMes - diaDeHoje + 1 : 0; // conta hoje
+
+    const [orcamentos, ultimoCartao] = await Promise.all([
+      this.orcamentosDoMes(inicio, fim),
+      // até quando chegaram as compras do cartão: o banco manda com atraso
+      this.prisma.lancamento.findFirst({
+        where: { conta: { tipo: 'CARTAO_CREDITO' } },
+        orderBy: { data: 'desc' },
+        select: { data: true },
+      }),
+    ]);
+
+    return {
+      diasNoMes,
+      diasRestantes,
+      comprasDoCartaoAte: ultimoCartao?.data ?? null,
+      limites: orcamentos.map((o) => {
+        const resta = centavos(o.valorMensal - o.gasto);
+        const fracao = o.valorMensal ? o.gasto / o.valorMensal : 0;
+        // no ritmo de agora, quanto vai dar no fim do mês (só depois de alguns dias)
+        const projecao = mesAtual && diaDeHoje >= 5 ? centavos((o.gasto / diaDeHoje) * diasNoMes) : null;
+        const situacao = fracao >= 1 ? 'estourou' : fracao >= 0.8 || (projecao !== null && projecao > o.valorMensal) ? 'atencao' : 'ok';
+        return {
+          ...o,
+          resta,
+          fracao,
+          porDia: diasRestantes > 0 ? centavos(Math.max(0, resta) / diasRestantes) : null,
+          projecao,
+          situacao,
+        };
+      }),
     };
   }
 
@@ -95,18 +179,23 @@ class PlanejamentoService {
       include: { categorias: { select: { id: true, nome: true } } },
       orderBy: { nome: 'asc' },
     });
+    // estorno (entrada na mesma categoria) devolve ao limite
     const gastos = await this.prisma.lancamento.groupBy({
-      by: ['categoriaId'],
-      where: { sentido: 'SAIDA', data: { gte: inicio, lt: fim }, categoriaId: { not: null } },
+      by: ['categoriaId', 'sentido'],
+      where: { data: { gte: inicio, lt: fim }, categoriaId: { not: null } },
       _sum: { valor: true },
     });
-    const porCategoria = new Map(gastos.map((g) => [g.categoriaId!, g._sum.valor ?? new Prisma.Decimal(0)]));
+    const porCategoria = new Map<string, number>();
+    for (const g of gastos) {
+      const valor = (g._sum.valor ?? new Prisma.Decimal(0)).toNumber() * (g.sentido === 'SAIDA' ? 1 : -1);
+      porCategoria.set(g.categoriaId!, (porCategoria.get(g.categoriaId!) ?? 0) + valor);
+    }
 
     return limites.map((l) => ({
       id: l.id,
       nome: l.nome,
       valorMensal: l.valorMensal.toNumber(),
-      gasto: centavos(l.categorias.reduce((s, c) => s + (porCategoria.get(c.id)?.toNumber() ?? 0), 0)),
+      gasto: centavos(Math.max(0, l.categorias.reduce((s, c) => s + (porCategoria.get(c.id) ?? 0), 0))),
       categorias: l.categorias,
     }));
   }
@@ -171,6 +260,11 @@ class PlanejamentoController {
   @Get('planejamento')
   doMes(@Query() filtro: FiltroMes) {
     return this.planejamento.doMes(filtro.mes);
+  }
+
+  @Get('limites')
+  limites(@Query() filtro: FiltroMes) {
+    return this.planejamento.limites(filtro.mes);
   }
 
   @Post('receitas')

@@ -1,12 +1,13 @@
 import { NavLink, Outlet } from 'react-router'
-import { IconeAlvo, IconeBroto, IconeCalendario, IconeCartao, IconeExtrato, IconeInicio } from './Icones'
+import { IconeAlvo, IconeMedidor, IconeBroto, IconeCalendario, IconeCartao, IconeExtrato, IconeInicio } from './Icones'
 
 const secoes = [
   { para: '/', nome: 'Início', Icone: IconeInicio, naBarra: true },
   { para: '/extrato', nome: 'Extrato', Icone: IconeExtrato, naBarra: true },
   { para: '/cartoes', nome: 'Cartões', Icone: IconeCartao, naBarra: true },
   { para: '/contas', nome: 'Contas a pagar', curto: 'Contas', Icone: IconeCalendario, naBarra: true },
-  { para: '/metas', nome: 'Metas', Icone: IconeAlvo, naBarra: true },
+  { para: '/limites', nome: 'Limites', Icone: IconeMedidor, naBarra: true },
+  { para: '/metas', nome: 'Metas', Icone: IconeAlvo, naBarra: false },
   { para: '/planejamento', nome: 'Planejamento', Icone: IconeAlvo, naBarra: false },
   { para: '/investimentos', nome: 'Investimentos', Icone: IconeAlvo, naBarra: false },
   { para: '/sugestoes', nome: 'Sugestões', Icone: IconeAlvo, naBarra: false },

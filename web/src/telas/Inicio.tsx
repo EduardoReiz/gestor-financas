@@ -15,6 +15,7 @@ export function Inicio() {
   const [mes, setMes] = useState(mesAtual)
   const { dados: r, erro } = useApi(() => api.resumo(mes), [mes])
   const { dados: plano } = useApi(() => api.planejamento(mes), [mes])
+  const { dados: limites } = useApi(() => api.limites(mes), [mes])
 
   const botaoMes = 'flex size-11 items-center justify-center rounded-xl border border-borda-forte bg-white'
 
@@ -87,20 +88,46 @@ export function Inicio() {
                   <span className="font-titulo text-lg font-bold">{brl(r.codigosParaPagar.total)}</span>
                 </Link>
               )}
-              {plano && (
-                <Link to="/planejamento" className="flex items-center justify-between rounded-2xl border border-borda bg-white p-4">
+              {plano?.mesAtual && (
+                <Link to="/planejamento" className="flex items-center justify-between gap-3 rounded-2xl border border-borda bg-white p-4">
                   <span className="flex flex-col gap-0.5">
-                    <span className="text-[13px] text-suave">Sobra estimada do mês</span>
-                    <span className={`font-titulo text-xl font-bold ${plano.resumo.sobraEstimada < 0 ? 'text-ambar-texto' : ''}`}>
-                      {brl(plano.resumo.sobraEstimada)}
+                    <span className="text-[13px] text-suave">Vai sobrar até o fim do mês</span>
+                    <span className={`font-titulo text-xl font-bold ${plano.sobra.sobraEstimada < 0 ? 'text-ambar-texto' : ''}`}>
+                      {brl(plano.sobra.sobraEstimada)}
                     </span>
                   </span>
                   <span className="text-right text-[13px] text-suave">
-                    renda {brl(plano.resumo.rendaPrevista)}
+                    hoje {brl(plano.sobra.saldoHoje)}
                     <br />
-                    comprometido {brl(plano.resumo.contasDoMes + plano.resumo.faturasCartao)}
+                    falta pagar {brl(plano.sobra.contasEmAberto + plano.sobra.faturaNoMes)}
                   </span>
                 </Link>
+              )}
+              {limites && limites.limites.length > 0 && (
+                <Cartao className="flex flex-col gap-3 p-4">
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="text-base font-semibold">Limites do mês</h2>
+                    <Link to="/limites" className="text-[13px] font-medium text-floresta">
+                      Ver todos
+                    </Link>
+                  </div>
+                  {[...limites.limites]
+                    .sort((a, b) => b.fracao - a.fracao)
+                    .map((l) => (
+                      <div key={l.id} className="flex flex-col gap-1.5">
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <span>{l.nome}</span>
+                          <span className={l.resta < 0 ? 'font-semibold text-ambar-texto' : 'text-suave'}>
+                            {l.resta >= 0 ? `resta ${brl(l.resta)}` : `passou ${brl(-l.resta)}`}
+                          </span>
+                        </div>
+                        <Barra
+                          fracao={l.fracao}
+                          cor={l.situacao === 'estourou' ? 'bg-ambar' : l.situacao === 'atencao' ? 'bg-[#C98A2E]' : 'bg-floresta'}
+                        />
+                      </div>
+                    ))}
+                </Cartao>
               )}
               {r.sugestao && (
                 <Link to="/sugestoes" className="flex gap-3 rounded-2xl bg-ambar-claro p-4">
@@ -137,7 +164,7 @@ export function Inicio() {
                   <div key={c.id} className="flex min-h-14 items-center justify-between border-t border-divisor">
                     <span className="flex flex-col">
                       <span className="text-[15px] font-medium">{c.nome}</span>
-                      <span className="text-[13px] text-suave">
+                      <span className={`text-[13px] ${diasAte(c.vencimento) < 0 ? 'font-semibold text-ambar-texto' : 'text-suave'}`}>
                         {diaMes(c.vencimento)} · {prazo(diasAte(c.vencimento))}
                       </span>
                     </span>
@@ -146,26 +173,30 @@ export function Inicio() {
                 ))}
               </Cartao>
 
-              <Cartao className="flex flex-col gap-3.5 p-4">
-                <h2 className="text-base font-semibold">Metas</h2>
-                {r.metas.map((m) => (
-                  <div key={m.id} className="flex flex-col gap-1.5">
-                    <div className="flex justify-between text-sm">
-                      <span>{m.nome}</span>
-                      <span className="text-suave">{Math.round((m.guardado / m.alvo) * 100)}%</span>
+              {r.metas.length > 0 && (
+                <Cartao className="flex flex-col gap-3.5 p-4">
+                  <h2 className="text-base font-semibold">Metas</h2>
+                  {r.metas.map((m) => (
+                    <div key={m.id} className="flex flex-col gap-1.5">
+                      <div className="flex justify-between text-sm">
+                        <span>{m.nome}</span>
+                        <span className="text-suave">{Math.round((m.guardado / m.alvo) * 100)}%</span>
+                      </div>
+                      <Barra fracao={m.guardado / m.alvo} />
                     </div>
-                    <Barra fracao={m.guardado / m.alvo} />
-                  </div>
-                ))}
-              </Cartao>
+                  ))}
+                </Cartao>
+              )}
 
-              <Link to="/investimentos" className="flex items-center justify-between rounded-2xl border border-borda bg-white p-4">
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-[13px] text-suave">Investimentos</span>
-                  <span className="font-titulo text-xl font-bold">{brl(r.investimentos.total)}</span>
-                </span>
-                <span className="text-[13px] font-semibold text-floresta">+ {brl(r.investimentos.rendimentoNoMes)} no mês</span>
-              </Link>
+              {r.investimentos.total > 0 && (
+                <Link to="/investimentos" className="flex items-center justify-between rounded-2xl border border-borda bg-white p-4">
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[13px] text-suave">Investimentos</span>
+                    <span className="font-titulo text-xl font-bold">{brl(r.investimentos.total)}</span>
+                  </span>
+                  <span className="text-[13px] font-semibold text-floresta">+ {brl(r.investimentos.rendimentoNoMes)} no mês</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>
@@ -175,7 +206,8 @@ export function Inicio() {
 }
 
 function prazo(dias: number) {
-  if (dias <= 0) return 'hoje'
+  if (dias < 0) return dias === -1 ? 'atrasada 1 dia' : `atrasada ${-dias} dias`
+  if (dias === 0) return 'hoje'
   if (dias === 1) return 'amanhã'
   return `em ${dias} dias`
 }

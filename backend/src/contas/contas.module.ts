@@ -16,6 +16,7 @@ class NovaContaFixa {
 
 // Na edição tudo é opcional: só muda o que veio.
 class EditarContaFixa {
+  @IsOptional() @IsString() categoriaId?: string;
   @IsOptional() @IsString() @MaxLength(60) nome?: string;
   @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @IsPositive() valorPrevisto?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(31) diaVencimento?: number;
@@ -84,6 +85,7 @@ export class ContasService {
       where: { ativa: true },
       select: {
         id: true, nome: true, valorPrevisto: true, diaVencimento: true, formaPagamento: true, recebedor: true, contem: true, valorVariavel: true,
+        categoria: { select: { id: true, nome: true } },
       },
       orderBy: [{ diaVencimento: 'asc' }, { nome: 'asc' }],
     });
@@ -96,7 +98,8 @@ export class ContasService {
     if (!fixa) throw new NotFoundException('conta fixa não encontrada');
     const contem = dados.contem === undefined ? undefined : dados.contem.trim() || null;
 
-    await this.prisma.contaFixa.update({ where: { id }, data: { ...dados, contem } });
+    await this.prisma.contaFixa.update({ where: { id }, data: { ...dados, contem, categoriaId: dados.categoriaId || undefined } });
+    if (dados.categoriaId) await this.categorizarPagamentos(id);
 
     const abertas = await this.prisma.contaAPagar.findMany({
       where: { contaFixaId: id, pagaEm: null, vencimento: { gte: intervaloDoMes().inicio } },
@@ -199,6 +202,7 @@ export class ContasService {
       include: { contaFixa: { select: { contem: true } } },
     });
 
+    const ligadas = new Set<string>();
     for (const conta of pendentes) {
       const contem = conta.contaFixa?.contem?.trim();
       const folga = (contem ? FOLGA_COM_NOME_DIAS : FOLGA_DIAS) * 86_400_000;
@@ -221,8 +225,22 @@ export class ContasService {
           // o valor da conta passa a ser o que foi pago de verdade
           data: { pagaEm: pagamento.data, lancamentoId: pagamento.id, valor: pagamento.valor, valorInformado: true },
         });
+        if (conta.contaFixaId) ligadas.add(conta.contaFixaId);
       }
     }
+    for (const fixaId of ligadas) await this.categorizarPagamentos(fixaId);
+  }
+
+  // O Pix do aluguel sai do banco como "Transferência". Se a conta fixa tem
+  // categoria, o lançamento que a pagou passa a ter essa categoria.
+  async categorizarPagamentos(contaFixaId: string) {
+    const fixa = await this.prisma.contaFixa.findUnique({ where: { id: contaFixaId }, select: { categoriaId: true } });
+    if (!fixa?.categoriaId) return;
+    await this.prisma.lancamento.updateMany({
+      // (sem categoria também entra: NOT sozinho deixaria os vazios de fora)
+      where: { contaAPagar: { contaFixaId }, OR: [{ origemCategoria: null }, { origemCategoria: { not: 'MANUAL' } }] },
+      data: { categoriaId: fixa.categoriaId, origemCategoria: 'CONTA_FIXA', categoriaConfirmada: true },
+    });
   }
 }
 

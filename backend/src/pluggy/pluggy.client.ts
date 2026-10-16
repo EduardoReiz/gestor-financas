@@ -18,6 +18,7 @@ export interface PluggyConta {
   balance: number;
   creditData: {
     creditLimit: number | null;
+    availableCreditLimit: number | null;
     balanceCloseDate: string | null; // AAAA-MM-DD
     balanceDueDate: string | null;
   } | null;

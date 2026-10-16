@@ -43,10 +43,11 @@ export class ResumoService {
           include: { conta: { include: { conexao: true } } },
           orderBy: { vencimento: 'asc' },
         }),
+        // as atrasadas primeiro (ficavam de fora), depois as próximas
         this.prisma.contaAPagar.findMany({
-          where: { pagaEm: null, vencimento: { gte: inicioDoDia(hoje) } },
+          where: { pagaEm: null, vencimento: { lt: new Date(inicioDoDia(hoje).getTime() + 31 * 86_400_000) } },
           orderBy: { vencimento: 'asc' },
-          take: 3,
+          take: 4,
         }),
         this.prisma.meta.findMany({
           where: { arquivada: false },
