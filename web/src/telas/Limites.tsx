@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { api, useApi, type Categoria, type Limite } from '../api'
+import { api, useApi, type Categoria, type Limite, type Limites as TLimites } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { BotaoAdicionar, Campo, botaoPrincipal } from '../componentes/Formulario'
 import { brl, diaMes, mesAtual, nomeDoMes, paraNumero } from '../formatos'
@@ -65,7 +65,7 @@ export function Limites() {
                   <FormLimite limite={l} categorias={categorias} aoSalvar={fechar} aoCancelar={() => setEditando(undefined)} />
                 </Cartao>
               ) : (
-                <CartaoLimite key={l.id} limite={l} aoEditar={() => setEditando(l.id)} />
+                <CartaoLimite key={l.id} limite={l} semana={dados.semana} aoEditar={() => setEditando(l.id)} />
               ),
             )}
           </div>
@@ -75,7 +75,12 @@ export function Limites() {
   )
 }
 
-function CartaoLimite({ limite: l, aoEditar }: { limite: Limite; aoEditar: () => void }) {
+const diaDaSemana = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { weekday: 'long', timeZone: 'America/Sao_Paulo' }).replace('-feira', '')
+
+function CartaoLimite({ limite: l, semana, aoEditar }: { limite: Limite; semana: TLimites['semana']; aoEditar: () => void }) {
+  // limite de combustível: mostra se o veículo já abasteceu nesta semana
+  const daSemana = semana.filter((v) => l.categorias.some((c) => c.nome === `Combustível ${v.veiculo}`))
   const s = SITUACAO[l.situacao]
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-borda bg-white p-4">
@@ -101,6 +106,23 @@ function CartaoLimite({ limite: l, aoEditar }: { limite: Limite; aoEditar: () =>
       </div>
 
       <Barra fracao={l.fracao} cor={s.cor} altura="h-2.5" />
+
+      {daSemana.map((v) => (
+        <p
+          key={v.veiculo}
+          className={`rounded-xl px-3 py-2 text-[13px] ${v.vezes > 1 ? 'bg-ambar-claro text-ambar-texto' : 'bg-fundo text-suave'}`}
+        >
+          Esta semana:{' '}
+          {v.ultimo ? (
+            <>
+              <b className="text-tinta">{v.veiculo} abastecido</b> {diaDaSemana(v.ultimo.data)} ({brl(v.ultimo.valor)})
+              {v.vezes > 1 && ` · ${v.vezes} vezes, mais que o normal`}
+            </>
+          ) : (
+            <>{v.veiculo} ainda não abasteceu</>
+          )}
+        </p>
+      ))}
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-suave">
         <span>

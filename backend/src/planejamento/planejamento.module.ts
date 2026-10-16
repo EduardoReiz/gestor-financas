@@ -5,6 +5,7 @@ import { ArrayNotEmpty, IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsStri
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes } from '../comum/mes';
 import { ContasModule, ContasService } from '../contas/contas.module';
+import { inicioDaSemana } from '../pluggy/sincronizacao.service';
 
 class DadosReceita {
   @IsString() @MaxLength(60) nome!: string;
@@ -126,10 +127,13 @@ class PlanejamentoService {
       }),
     ]);
 
+    const semana = await this.combustivelDaSemana();
+
     return {
       diasNoMes,
       diasRestantes,
       comprasDoCartaoAte: ultimoCartao?.data ?? null,
+      semana,
       limites: orcamentos.map((o) => {
         const resta = centavos(o.valorMensal - o.gasto);
         const fracao = o.valorMensal ? o.gasto / o.valorMensal : 0;
@@ -198,6 +202,20 @@ class PlanejamentoService {
       gasto: centavos(Math.max(0, l.categorias.reduce((s, c) => s + (porCategoria.get(c.id) ?? 0), 0))),
       categorias: l.categorias,
     }));
+  }
+
+  // Carro e moto abastecem uma vez por semana: já abasteceu nesta semana?
+  private async combustivelDaSemana() {
+    const segunda = inicioDaSemana(new Date());
+    const abastecimentos = await this.prisma.lancamento.findMany({
+      where: { sentido: 'SAIDA', data: { gte: segunda }, categoria: { nome: { in: ['Combustível carro', 'Combustível moto'] } } },
+      select: { data: true, valor: true, categoria: { select: { nome: true } } },
+      orderBy: { data: 'asc' },
+    });
+    return ['carro', 'moto'].map((veiculo) => {
+      const doVeiculo = abastecimentos.filter((a) => a.categoria?.nome === `Combustível ${veiculo}`);
+      return { veiculo, vezes: doVeiculo.length, ultimo: doVeiculo.at(-1) && { data: doVeiculo.at(-1)!.data, valor: doVeiculo.at(-1)!.valor.toNumber() } };
+    });
   }
 
   // ---------- receitas ----------

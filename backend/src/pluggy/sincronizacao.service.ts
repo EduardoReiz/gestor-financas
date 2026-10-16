@@ -24,6 +24,13 @@ export function cicloAberto(hoje: Date, diaVencimento: number, diaFechamento: nu
   throw new Error('não foi possível calcular o ciclo da fatura');
 }
 
+// Segunda-feira 00:00 da semana da data (no fuso de Brasília).
+export function inicioDaSemana(data: Date) {
+  const local = new Date(data.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const deslocamento = (local.getDay() + 6) % 7; // segunda = 0
+  return new Date(Date.UTC(local.getFullYear(), local.getMonth(), local.getDate() - deslocamento));
+}
+
 // PLUGGY_ITENS=itemId:Itaú,itemId:Bradesco
 // O conector MeuPluggy não diz qual é o banco, então o nome vem daqui.
 export function itensConfigurados() {
@@ -83,6 +90,7 @@ export class SincronizacaoService {
       }
       await this.pareaTransferenciasEntreBancos();
       await this.marcaPagamentosDeFatura();
+      await this.revisaCombustivel();
       await this.prisma.sincronizacao.update({
         where: { id: registro.id },
         data: { terminadaEm: new Date(), sucesso: true, novos },
@@ -372,6 +380,27 @@ export class SincronizacaoService {
       marcados += count;
     }
     if (marcados) this.log.log(`${marcados} pagamentos de fatura tirados dos totais`);
+  }
+
+  // Carro e moto abastecem uma vez por semana cada. Um segundo abastecimento
+  // do mesmo veículo na mesma semana (seg a dom) fica para você confirmar.
+  private async revisaCombustivel() {
+    const abastecimentos = await this.prisma.lancamento.findMany({
+      where: { sentido: 'SAIDA', categoria: { nome: { in: ['Combustível carro', 'Combustível moto'] } }, origemCategoria: 'PLUGGY' },
+      select: { id: true, data: true, categoriaId: true, categoriaConfirmada: true },
+      orderBy: { data: 'asc' },
+    });
+    const vistos = new Set<string>();
+    const repetidos: string[] = [];
+    for (const a of abastecimentos) {
+      const chave = `${a.categoriaId}-${inicioDaSemana(a.data).toISOString().slice(0, 10)}`;
+      if (vistos.has(chave)) repetidos.push(a.id);
+      else vistos.add(chave);
+    }
+    if (repetidos.length) {
+      await this.prisma.lancamento.updateMany({ where: { id: { in: repetidos } }, data: { categoriaConfirmada: false } });
+      this.log.log(`${repetidos.length} abastecimentos repetidos na mesma semana para conferir`);
+    }
   }
 
   private async salvarInvestimentos(conexaoId: string, itemId: string) {

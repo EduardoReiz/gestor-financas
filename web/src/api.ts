@@ -158,6 +158,7 @@ export interface Limites {
   diasNoMes: number
   diasRestantes: number
   comprasDoCartaoAte: string | null
+  semana: { veiculo: 'carro' | 'moto'; vezes: number; ultimo: { data: string; valor: number } | null }[]
   limites: Limite[]
 }
 
