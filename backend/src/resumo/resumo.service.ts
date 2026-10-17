@@ -28,9 +28,12 @@ export class ResumoService {
     };
     const doMes = { data: { gte: intervalo.inicio, lt: intervalo.fim }, ...contaNosTotais };
 
-    const [contas, porSentido, porCategoria, categorias, faturas, contasAPagar, metas, investimentos, sugestao, ultimaSync] =
+    const [contas, porSentido, porCategoria, categorias, faturas, contasAPagar, metas, investimentos, sugestao] =
       await Promise.all([
-        this.prisma.conta.findMany({ where: { tipo: { not: 'CARTAO_CREDITO' } }, select: { saldo: true } }),
+        this.prisma.conta.findMany({
+          where: { tipo: { not: 'CARTAO_CREDITO' } },
+          select: { saldo: true, conexao: { select: { banco: true, sincronizadaEm: true } } },
+        }),
         this.prisma.lancamento.groupBy({ by: ['sentido'], where: doMes, _sum: { valor: true } }),
         this.prisma.lancamento.groupBy({
           by: ['categoriaId'],
@@ -63,19 +66,29 @@ export class ResumoService {
           .findMany({ where: { status: 'NOVA', tipo: 'ONDE' }, orderBy: { impactoMensal: 'desc' } })
           // atraso primeiro, mesmo que valha pouco: é o que dói no score
           .then((s) => s.find((x) => x.chave.startsWith('atraso-')) ?? s[0] ?? null),
-        this.prisma.sincronizacao.findFirst({ where: { sucesso: true }, orderBy: { iniciadaEm: 'desc' } }),
       ]);
 
     const nomeCategoria = new Map(categorias.map((c) => [c.id, c.nome]));
     const total = (s: Sentido) => num(porSentido.find((p) => p.sentido === s)?._sum.valor);
+
+    // O saldo é uma foto que o Meu Pluggy tira uma vez por dia de cada banco.
+    // A data que vale é a da foto do banco (não a hora em que o app copiou),
+    // e a mais antiga entre os bancos, para não parecer mais novo do que é.
+    const porBanco = new Map<string, { saldo: Prisma.Decimal; atualizadoEm: Date | null }>();
+    for (const c of contas) {
+      const b = porBanco.get(c.conexao.banco) ?? { saldo: new Prisma.Decimal(0), atualizadoEm: c.conexao.sincronizadaEm };
+      porBanco.set(c.conexao.banco, { ...b, saldo: b.saldo.plus(c.saldo) });
+    }
+    const datas = contas.map((c) => c.conexao.sincronizadaEm).filter((d): d is Date => !!d);
 
     const investido = somar(investimentos.map((i) => i.saldo));
     const investidoNoInicioDoMes = somar(investimentos.map((i) => i.historico[0]?.saldo ?? i.saldo));
 
     return {
       mes: `${intervalo.inicio.getFullYear()}-${String(intervalo.inicio.getMonth() + 1).padStart(2, '0')}`,
-      atualizadoEm: ultimaSync?.terminadaEm ?? null,
+      atualizadoEm: datas.length ? new Date(Math.min(...datas.map((d) => d.getTime()))) : null,
       saldoContas: somar(contas.map((c) => c.saldo)).toNumber(),
+      saldoPorBanco: [...porBanco].map(([banco, b]) => ({ banco, saldo: b.saldo.toNumber(), atualizadoEm: b.atualizadoEm })),
       entradas: total(Sentido.ENTRADA),
       saidas: total(Sentido.SAIDA),
       porCategoria: porCategoria

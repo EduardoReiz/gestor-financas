@@ -7,6 +7,7 @@ export interface Resumo {
   mes: string
   atualizadoEm: string | null
   saldoContas: number
+  saldoPorBanco: { banco: string; saldo: number; atualizadoEm: string | null }[]
   entradas: number
   saidas: number
   porCategoria: { categoria: string; valor: number }[]

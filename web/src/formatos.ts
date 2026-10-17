@@ -3,13 +3,11 @@ const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 export const brl = (valor: number) => moeda.format(valor)
 
 // "+ R$ 5.200,00" / "− R$ 3.947,85" (o sinal fica separado, como nas telas)
-export const brlComSinal = (valor: number, sentido: 'ENTRADA' | 'SAIDA') =>
-  `${sentido === 'ENTRADA' ? '+' : '−'} ${brl(Math.abs(valor))}`
+export const brlComSinal = (valor: number, sentido: 'ENTRADA' | 'SAIDA') => `${sentido === 'ENTRADA' ? '+' : '−'} ${brl(Math.abs(valor))}`
 
 // Datas "só dia" chegam como meia-noite UTC; sem timeZone UTC o Brasil
 // mostraria o dia anterior.
-export const diaMes = (iso: string) =>
-  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
+export const diaMes = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })
 
 export const nomeDoMes = (mes: string) => {
   const [ano, m] = mes.split('-').map(Number)
@@ -17,8 +15,7 @@ export const nomeDoMes = (mes: string) => {
   return `${nome[0].toUpperCase()}${nome.slice(1)} de ${ano}`
 }
 
-export const mesCurto = (iso: string) =>
-  new Date(iso).toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }).replace('.', '')
+export const mesCurto = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }).replace('.', '')
 
 export const diasAte = (iso: string) => {
   const hoje = new Date()
@@ -27,8 +24,16 @@ export const diasAte = (iso: string) => {
   return Math.round((alvo.getTime() - inicioHoje) / 86_400_000)
 }
 
-export const horaDe = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+export const horaDe = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+// "hoje às 11:15", "ontem às 11:15" ou "14/10 às 11:15": só a hora engana
+// quando o dado é de outro dia.
+export const quando = (iso: string) => {
+  const d = new Date(iso)
+  const dias = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000)
+  const dia = dias === 0 ? 'hoje' : dias === 1 ? 'ontem' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return `${dia} às ${horaDe(iso)}`
+}
 
 export const mesAtual = () => {
   const d = new Date()

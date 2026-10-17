@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { api, useApi } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
 import { IconeAvancar, IconeLampada, IconeVoltar } from '../componentes/Icones'
-import { brl, diaMes, diasAte, horaDe, mesAtual, mesCurto, nomeDoMes } from '../formatos'
+import { brl, diaMes, diasAte, mesAtual, mesCurto, nomeDoMes, quando } from '../formatos'
 
 function mudarMes(mes: string, delta: number) {
   const [ano, m] = mes.split('-').map(Number)
@@ -56,7 +56,15 @@ export function Inicio() {
             <section className="col-span-2 flex flex-col gap-1.5 rounded-[20px] bg-floresta p-5 text-white lg:col-span-1">
               <span className="text-sm">Saldo nas contas</span>
               <span className="font-titulo text-4xl font-bold lg:text-[30px]">{brl(r.saldoContas)}</span>
-              {r.atualizadoEm && <span className="text-[13px]">Atualizado às {horaDe(r.atualizadoEm)}</span>}
+              {r.atualizadoEm && <span className="text-[13px]">Saldo do banco de {quando(r.atualizadoEm)}</span>}
+              <ul className="mt-1 flex flex-col gap-0.5 text-[13px] text-white/80">
+                {r.saldoPorBanco.map((b) => (
+                  <li key={b.banco} className="flex justify-between gap-3">
+                    <span>{b.banco}</span>
+                    <span>{brl(b.saldo)}</span>
+                  </li>
+                ))}
+              </ul>
             </section>
             <Numero rotulo="Entradas no mês" valor={`+ ${brl(r.entradas)}`} cor="text-floresta" />
             <Numero rotulo="Saídas no mês" valor={`− ${brl(r.saidas)}`} />

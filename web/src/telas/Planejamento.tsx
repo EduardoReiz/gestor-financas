@@ -58,10 +58,10 @@ function Sobra({ dados }: { dados: TPlanejamento }) {
 
       <div className="mt-2 flex flex-col">
         <Linha
-          rotulo="Dinheiro nas contas hoje"
+          rotulo="Dinheiro nas contas"
           valor={s.saldoHoje}
           sinal=""
-          explica="Saldo real dos bancos conectados. O que você já gastou no Pix e no débito já saiu daqui."
+          explica="Saldo dos bancos conectados na última atualização do Meu Pluggy (uma vez por dia, perto das 11h). O que você gastou depois disso ainda não saiu daqui, e o Santander não entra."
         />
         <Linha
           rotulo="Ainda vai cair"
