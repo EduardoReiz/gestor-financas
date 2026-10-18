@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import { ArrayNotEmpty, IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes } from '../comum/mes';
+import { totalDaFatura } from '../comum/fatura';
 import { ContasModule, ContasService } from '../contas/contas.module';
 import { inicioDaSemana } from '../pluggy/sincronizacao.service';
 
@@ -70,7 +71,7 @@ class PlanejamentoService {
     const faturaSeguinte = faturas.filter((f) => f.vencimento >= fim);
 
     const totalAReceber = centavos(aReceber.reduce((s, r) => s + r.valor, 0));
-    const totalFaturaNoMes = centavos(faturaNoMes.reduce((s, f) => s + f.total.toNumber(), 0));
+    const totalFaturaNoMes = centavos(faturaNoMes.reduce((s, f) => s + totalDaFatura(f), 0));
 
     const cartoes = contas
       .filter((c) => c.tipo === 'CARTAO_CREDITO' && c.limite)
@@ -95,12 +96,12 @@ class PlanejamentoService {
         aReceber: aReceber.map((r) => ({ nome: r.nome, valor: r.valor, dia: r.dia })),
         foraDasContas: foraDasContas.map((r) => ({ nome: r.nome, valor: r.valor, dia: r.dia })),
         contasEmAberto: contasDoMes.aVencer.map((c) => ({ nome: c.nome, valor: c.valor, vencimento: c.vencimento, estimado: c.estimado })),
-        faturaNoMes: faturaNoMes.map((f) => ({ banco: f.conta.conexao.banco, vencimento: f.vencimento, total: f.total.toNumber() })),
+        faturaNoMes: faturaNoMes.map((f) => ({ banco: f.conta.conexao.banco, vencimento: f.vencimento, total: totalDaFatura(f) })),
         faturaSeguinte: faturaSeguinte.map((f) => ({
           banco: f.conta.conexao.banco,
           fechamento: f.fechamento,
           vencimento: f.vencimento,
-          total: f.total.toNumber(),
+          total: totalDaFatura(f),
         })),
         cartoes,
       },

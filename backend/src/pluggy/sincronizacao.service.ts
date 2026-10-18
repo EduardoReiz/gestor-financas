@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Sentido, TipoConta } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { PluggyClient, type PluggyConta } from './pluggy.client';
-import { combustivelNoPadrao, traduzirCategoria } from './categorias';
+import { combustivelNoPadrao, compraComCategoriaCerta, traduzirCategoria } from './categorias';
 
 const DIA = 86_400_000;
 const soData = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
@@ -238,6 +238,10 @@ export class SincronizacaoService {
       ate: new Date(faturaAberta.fechamento.getTime() + DIA),
     };
 
+    // só pergunta das compras recentes: os meses antigos já foram conferidos
+    const hoje = new Date();
+    const inicioDoMesPassado = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+
     let novos = 0;
     for (const l of lancamentos) {
       const sentido: Sentido = l.type === 'DEBIT' ? 'SAIDA' : 'ENTRADA';
@@ -257,12 +261,20 @@ export class SincronizacaoService {
         faturaId,
         parcelaAtual: meta?.installmentNumber ?? null,
         parcelasTotal: meta?.totalInstallments ?? null,
+        mcc: meta?.payeeMCC ?? null,
+        cartaoFinal: meta?.cardNumber ?? null,
       };
 
       const existente = existentes.get(l.id);
       // categoria escolhida na mão (ou a da conta fixa que ele pagou) nunca é trocada
       const fixa = existente?.origemCategoria === 'MANUAL' || existente?.origemCategoria === 'CONTA_FIXA';
-      const categoria = fixa ? null : await this.categoriaPara(l.description, l.categoryId, sentido, regras, Math.abs(l.amount));
+      const compra = sentido === 'SAIDA' && (!!meta || /^CARTAO DEBITO/i.test(l.description));
+      const categoria = fixa
+        ? null
+        : await this.categoriaPara(l.description, l.categoryId, sentido, regras, Math.abs(l.amount), {
+            mcc: meta?.payeeMCC ?? null,
+            compraRecente: compra && data >= inicioDoMesPassado,
+          });
 
       if (existente) {
         await this.prisma.lancamento.update({
@@ -290,11 +302,12 @@ export class SincronizacaoService {
     sentido: Sentido,
     regras: { contem: string; categoriaId: string }[],
     valor: number,
+    { mcc, compraRecente }: { mcc: number | null; compraRecente: boolean },
   ) {
     const regra = regras.find((r) => descricao.toLowerCase().includes(r.contem.toLowerCase()));
     if (regra) return { categoriaId: regra.categoriaId, origemCategoria: 'REGRA' as const, categoriaConfirmada: true };
 
-    const destino = traduzirCategoria(pluggyId, sentido, valor);
+    const destino = traduzirCategoria(pluggyId, sentido, valor, mcc);
     if (!destino) return null;
 
     const categoria = await this.prisma.categoria.upsert({
@@ -304,8 +317,13 @@ export class SincronizacaoService {
     });
     // Pix para uma pessoa sai como "Transferências": só você sabe o que foi
     // (o aluguel, um empréstimo, a parte de uma conta...). O app pergunta.
-    // perguntar quando o app está chutando: Pix para pessoa, e combustível fora do padrão
-    const chute = destino.nome === 'Transferências' || (destino.nome.startsWith('Combustível') && !combustivelNoPadrao(valor));
+    // perguntar quando o app está chutando: Pix para pessoa, combustível fora
+    // do padrão e compra em loja que o tipo não confirma (padaria vira "Mercado")
+    const combustivel = destino.nome.startsWith('Combustível');
+    const chute =
+      destino.nome === 'Transferências' ||
+      (combustivel && !combustivelNoPadrao(valor)) ||
+      (!combustivel && compraRecente && !compraComCategoriaCerta(destino.nome, mcc));
     return { categoriaId: categoria.id, origemCategoria: 'PLUGGY' as const, categoriaConfirmada: !chute };
   }
 

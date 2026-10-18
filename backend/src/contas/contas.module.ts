@@ -197,8 +197,10 @@ export class ContasService {
 
   // Liga sozinho a conta ao débito do extrato que a pagou.
   private async ligarPagamentos(inicio: Date, fim: Date) {
+    // também a marcada como paga à mão antes de o Pix chegar do banco: o
+    // valor dela precisa virar o que foi pago de verdade
     const pendentes = await this.prisma.contaAPagar.findMany({
-      where: { pagaEm: null, vencimento: { gte: inicio, lt: fim } },
+      where: { lancamentoId: null, vencimento: { gte: inicio, lt: fim } },
       include: { contaFixa: { select: { contem: true } } },
     });
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api, useApi, type Categoria, type Lancamento, type Sentido } from '../api'
 import { Cabecalho, Carregando, Cartao } from '../componentes/Base'
-import { brl, brlComSinal, diaMes, legivel, mesAtual, nomeDoMes } from '../formatos'
+import { brl, brlComSinal, diaMes, legivel, mesAtual, nomeDoMes, ondeFoi } from '../formatos'
 
 const campo = 'h-11 rounded-xl border border-borda-forte bg-white px-3.5 text-[15px] text-tinta'
 
@@ -179,6 +179,7 @@ function ListaCelular({
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate text-[15px] font-medium">{legivel(l.descricao)}</span>
                       <span className="text-[13px] text-suave">{origem(l)}</span>
+                      <span className="text-xs text-suave">{ondeFoi(l)}</span>
                     </span>
                     <span className={`shrink-0 text-[15px] font-semibold ${l.sentido === 'ENTRADA' ? 'text-floresta' : ''}`}>
                       {brlComSinal(l.valor, l.sentido)}
@@ -276,8 +277,9 @@ function TabelaMac({
                 <td className="px-4 py-3.5 whitespace-nowrap text-suave">{diaMes(l.data)}</td>
                 <td className="px-2 py-3.5 font-medium">
                   {/* botão de verdade para dar para chegar pelo teclado */}
-                  <button className="text-left" onClick={() => aoSelecionar(l.id)}>
+                  <button className="flex flex-col text-left" onClick={() => aoSelecionar(l.id)}>
                     {legivel(l.descricao)}
+                    {l.tipoDoLugar && <span className="text-xs font-normal text-suave">{l.tipoDoLugar}</span>}
                   </button>
                 </td>
                 <td className="px-2 py-3.5">
@@ -343,7 +345,7 @@ function Detalhe({
       {!embutido && (
         <>
           <span className="text-[13px] text-suave">
-            {diaMes(lancamento.data)} · {lancamento.conta.banco}
+            {ondeFoi(lancamento)} · {lancamento.conta.banco}
           </span>
           <h2 className="text-lg font-semibold">{legivel(lancamento.descricao)}</h2>
           <span className="font-titulo text-[26px] font-bold">{brlComSinal(lancamento.valor, lancamento.sentido)}</span>

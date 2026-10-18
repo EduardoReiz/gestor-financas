@@ -112,15 +112,19 @@ model Conta {
 }
 
 model Fatura {
-  id           String       @id @default(cuid())
-  contaId      String
-  conta        Conta        @relation(fields: [contaId], references: [id])
-  pluggyBillId String?      @unique
-  fechamento   DateTime     @db.Date
-  vencimento   DateTime     @db.Date
-  total        Decimal      @db.Decimal(12, 2)
-  paga         Boolean      @default(false)
-  lancamentos  Lancamento[]
+  id             String       @id @default(cuid())
+  contaId        String
+  conta          Conta        @relation(fields: [contaId], references: [id])
+  pluggyBillId   String?      @unique
+  fechamento     DateTime     @db.Date
+  vencimento     DateTime     @db.Date
+  total          Decimal      @db.Decimal(12, 2) // soma das compras que o banco mandou
+  // o valor que o app do banco mostra, informado por você: o Open Finance às
+  // vezes não manda todas as compras, e aí a soma fica menor que a fatura
+  totalInformado Decimal?     @db.Decimal(12, 2)
+  informadoEm    DateTime?
+  paga           Boolean      @default(false)
+  lancamentos    Lancamento[]
 
   @@index([contaId, vencimento])
 }
@@ -174,6 +178,8 @@ model Lancamento {
   fatura              Fatura?          @relation(fields: [faturaId], references: [id])
   parcelaAtual        Int?
   parcelasTotal       Int?
+  mcc                 Int? // tipo da loja pela bandeira (5541 = posto, 5912 = farmácia...)
+  cartaoFinal         String? // o cartão usado (o virtual da Apple Pay tem final próprio)
   // se este lançamento pagou uma conta do mês:
   contaAPagar         ContaAPagar?
   cobranca            Cobranca?

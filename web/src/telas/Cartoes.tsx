@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { api, useApi, type Cartao as TipoCartao } from '../api'
 import { Barra, Cabecalho, Carregando, Cartao } from '../componentes/Base'
-import { brl, diaMes, legivel } from '../formatos'
+import { brl, diaMes, legivel, paraNumero } from '../formatos'
 
 export function Cartoes() {
-  const { dados: cartoes, erro } = useApi(api.cartoes, [])
+  const { dados: cartoes, erro, recarregar } = useApi(api.cartoes, [])
   const [escolhidoId, setEscolhidoId] = useState<string>()
 
   if (!cartoes) return <Carregando erro={erro} />
@@ -59,6 +59,8 @@ export function Cartoes() {
           <Data rotulo="Vence" dia={diaMes(escolhido.fatura.vencimento)} explica="data de pagamento" />
         </div>
       )}
+
+      {escolhido.fatura && <ValorDoBanco key={escolhido.fatura.id} fatura={escolhido.fatura} aoSalvar={recarregar} />}
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
         <Cartao className="flex flex-col gap-3 p-4 lg:flex-1 lg:p-5">
@@ -116,6 +118,11 @@ function CartaoGrande({ cartao, destaque = true, className = '' }: { cartao: Tip
       <span className="flex flex-col">
         <span className={`text-[13px] ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>Fatura atual</span>
         <span className="font-titulo text-[34px] leading-tight font-bold lg:text-[28px]">{brl(cartao.fatura?.total ?? 0)}</span>
+        {cartao.fatura?.informado && (
+          <span className={`text-[13px] ${escuro ? 'text-[#D5DED9]' : 'text-suave'}`}>
+            valor do app do banco, informado em {diaMes(cartao.fatura.informadoEm!)}
+          </span>
+        )}
       </span>
       {cartao.limite && (
         <div className="flex flex-col gap-1.5">
@@ -138,6 +145,82 @@ function CartaoGrande({ cartao, destaque = true, className = '' }: { cartao: Tip
         </div>
       )}
     </div>
+  )
+}
+
+// O Open Finance às vezes não manda todas as compras do cartão (o Sicredi
+// deixou semanas de fora). Aí só o app do banco sabe o valor da fatura.
+function ValorDoBanco({ fatura, aoSalvar }: { fatura: NonNullable<TipoCartao['fatura']>; aoSalvar: () => void }) {
+  const [editando, setEditando] = useState(false)
+  const [texto, setTexto] = useState(fatura.informado ? String(fatura.informado).replace('.', ',') : '')
+  const [erro, setErro] = useState<string>()
+
+  async function salvar(valor: number | null) {
+    if (valor !== null && !(valor >= 0)) return setErro('Valor inválido')
+    await api.informarFatura(fatura.id, valor)
+    setEditando(false)
+    aoSalvar()
+  }
+
+  return (
+    <Cartao className="mb-4 flex flex-col gap-2.5 p-4 lg:mb-5 lg:p-5">
+      {fatura.naoDetalhado > 0 ? (
+        <p className="text-sm">
+          O banco cobra <b>{brl(fatura.total)}</b>, mas só mandou ao app {brl(fatura.somaDasCompras)} em compras.{' '}
+          <b>{brl(fatura.naoDetalhado)}</b> são compras que o banco ainda não detalhou.
+        </p>
+      ) : (
+        <p className="text-sm text-suave">
+          {fatura.informado
+            ? 'As compras que chegaram já somam o valor que você informou.'
+            : 'Valor somado das compras que o banco mandou. Confira no app do banco: às vezes falta compra.'}
+        </p>
+      )}
+      {editando ? (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            salvar(paraNumero(texto))
+          }}
+        >
+          <label className="sr-only" htmlFor="valor-fatura">
+            Valor da fatura no app do banco
+          </label>
+          <input
+            id="valor-fatura"
+            inputMode="decimal"
+            autoFocus
+            placeholder="2.400,89"
+            value={texto}
+            onChange={(e) => {
+              setTexto(e.target.value)
+              setErro(undefined)
+            }}
+            className="h-10 w-36 rounded-[10px] border border-borda-forte bg-white px-3 text-[15px]"
+          />
+          <button className="h-10 rounded-[10px] bg-floresta px-4 text-sm font-medium text-white">Salvar</button>
+          <button type="button" className="h-10 px-2 text-sm text-suave" onClick={() => setEditando(false)}>
+            Cancelar
+          </button>
+          {erro && <span className="text-sm text-ambar-texto">{erro}</span>}
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="h-10 rounded-[10px] border border-floresta px-3.5 text-sm font-medium text-floresta"
+            onClick={() => setEditando(true)}
+          >
+            {fatura.informado ? 'Atualizar valor do app do banco' : 'Informar valor do app do banco'}
+          </button>
+          {fatura.informado && (
+            <button className="h-10 px-2 text-sm text-suave" onClick={() => salvar(null)}>
+              Voltar a usar a soma das compras
+            </button>
+          )}
+        </div>
+      )}
+    </Cartao>
   )
 }
 

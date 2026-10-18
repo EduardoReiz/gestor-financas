@@ -1,5 +1,12 @@
-import { Controller, Get, Injectable, Module } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Injectable, Module, NotFoundException, Param, Patch } from '@nestjs/common';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.module';
+import { totalDaFatura } from '../comum/fatura';
+
+class ValorDaFatura {
+  // vazio (null) apaga o valor informado e volta a valer a soma das compras
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(1_000_000) total!: number | null;
+}
 
 @Injectable()
 class CartoesService {
@@ -21,7 +28,8 @@ class CartoesService {
 
     return cartoes.map((c) => {
       const fatura = c.faturas[0];
-      const total = fatura?.total.toNumber() ?? 0;
+      const total = fatura ? totalDaFatura(fatura) : 0;
+      const somaDasCompras = fatura?.total.toNumber() ?? 0;
       const limite = c.limite?.toNumber() ?? null;
 
       const porCategoria = new Map<string, number>();
@@ -42,12 +50,20 @@ class CartoesService {
         fatura: fatura && {
           id: fatura.id,
           total,
+          somaDasCompras,
+          informado: fatura.totalInformado?.toNumber() ?? null,
+          informadoEm: fatura.informadoEm,
+          // o que o banco cobra e não detalhou ao app (compras que não chegaram)
+          naoDetalhado: Math.round((total - somaDasCompras) * 100) / 100,
           fechamento: fatura.fechamento,
           vencimento: fatura.vencimento,
           // comprar no dia seguinte ao fechamento joga a compra para a próxima fatura
           melhorDiaDeCompra: diaSeguinte(fatura.fechamento),
         },
-        porCategoria: [...porCategoria]
+        porCategoria: [
+          ...porCategoria,
+          ...(fatura && total > somaDasCompras ? ([['Compras que o banco não mandou', total - somaDasCompras]] as const) : []),
+        ]
           .map(([categoria, valor]) => ({ categoria, valor: Math.round(valor * 100) / 100 }))
           .sort((a, b) => b.valor - a.valor),
         parcelamentos: (fatura?.lancamentos ?? [])
@@ -59,6 +75,15 @@ class CartoesService {
             valor: l.valor.toNumber(),
           })),
       };
+    });
+  }
+
+  async informarValor(faturaId: string, total: number | null) {
+    const fatura = await this.prisma.fatura.findUnique({ where: { id: faturaId }, select: { id: true } });
+    if (!fatura) throw new NotFoundException('fatura não encontrada');
+    await this.prisma.fatura.update({
+      where: { id: faturaId },
+      data: { totalInformado: total, informadoEm: total === null ? null : new Date() },
     });
   }
 }
@@ -76,6 +101,12 @@ class CartoesController {
   @Get()
   listar() {
     return this.cartoes.listar();
+  }
+
+  @Patch('faturas/:id/valor')
+  @HttpCode(204)
+  informarValor(@Param('id') id: string, @Body() dados: ValorDaFatura) {
+    return this.cartoes.informarValor(id, dados.total ?? null);
   }
 }
 

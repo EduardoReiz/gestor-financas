@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes } from '../comum/mes';
 import { FiltroLancamentos, TrocarCategoria } from './lancamentos.dto';
+import { TIPO_DO_LUGAR } from '../pluggy/categorias';
 
 @Injectable()
 export class LancamentosService {
@@ -45,12 +46,15 @@ export class LancamentosService {
         tipo: l.conta.tipo,
       },
       parcela: l.parcelasTotal ? `${l.parcelaAtual} de ${l.parcelasTotal}` : null,
+      tipoDoLugar: l.mcc ? (TIPO_DO_LUGAR[l.mcc] ?? null) : null,
+      cartaoFinal: l.cartaoFinal,
     }));
   }
 
   async confirmarCategoria(id: string) {
     await this.existe(id);
-    await this.prisma.lancamento.update({ where: { id }, data: { categoriaConfirmada: true } });
+    // confirmado por você vale como escolha sua: a sincronização não mexe mais
+    await this.prisma.lancamento.update({ where: { id }, data: { categoriaConfirmada: true, origemCategoria: 'MANUAL' } });
   }
 
   // Corrige a categoria. Com "aplicar aos próximos", vira uma regra que também

@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { api, useApi, type Categoria, type Lancamento } from '../api'
 import { Cabecalho, Carregando } from '../componentes/Base'
 import { IconeAvancar, IconeVoltar } from '../componentes/Icones'
-import { brl, diaMes, legivel, lugarDaCompra, mesAtual, nomeDoMes } from '../formatos'
+import { brl, legivel, lugarDaCompra, mesAtual, nomeDoMes, ondeFoi } from '../formatos'
 
 // Os botões de um toque: o que mais se mistura no dia a dia.
-const RAPIDAS = ['Mercado', 'Lanche', 'Lazer', 'Combustível carro', 'Combustível moto']
+const RAPIDAS = ['Mercado', 'Lanche', 'Lazer', 'Farmácia', 'Combustível carro', 'Combustível moto']
 // combustível é o mesmo posto para carro e moto: "sempre neste lugar" não serve
 const SEM_LUGAR_FIXO = ['Combustível carro', 'Combustível moto']
 
@@ -144,7 +144,7 @@ function ItemGasto({
             {l.descricao !== l.descricaoOriginal ? l.descricao : legivel(lugar)}
           </span>
           <span className="text-[13px] text-suave">
-            {diaMes(l.data)} · {l.conta.tipo === 'CARTAO_CREDITO' ? 'cartão' : 'conta'} {l.conta.banco}
+            {ondeFoi(l)} · {l.conta.tipo === 'CARTAO_CREDITO' ? 'cartão' : 'conta'} {l.conta.banco}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">

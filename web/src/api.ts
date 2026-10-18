@@ -32,6 +32,8 @@ export interface Lancamento {
   categoriaConfirmada: boolean
   conta: { id: string; banco: string; tipo: 'CORRENTE' | 'POUPANCA' | 'CARTAO_CREDITO' }
   parcela: string | null
+  tipoDoLugar: string | null
+  cartaoFinal: string | null
 }
 
 export interface Categoria {
@@ -52,6 +54,10 @@ export interface Cartao {
   fatura: {
     id: string
     total: number
+    somaDasCompras: number
+    informado: number | null
+    informadoEm: string | null
+    naoDetalhado: number
     fechamento: string
     vencimento: string
     melhorDiaDeCompra: string
@@ -267,6 +273,8 @@ export const api = {
   },
   categorias: () => pedir<Categoria[]>('/categorias'),
   cartoes: () => pedir<Cartao[]>('/cartoes'),
+  informarFatura: (faturaId: string, total: number | null) =>
+    pedir<void>(`/cartoes/faturas/${faturaId}/valor`, { method: 'PATCH', body: JSON.stringify({ total }) }),
   contas: (mes: string) => pedir<Contas>(`/contas?mes=${mes}`),
   novaContaFixa: (dados: {
     nome: string

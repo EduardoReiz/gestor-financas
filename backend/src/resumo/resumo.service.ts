@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, Sentido } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes, mesesAntes } from '../comum/mes';
+import { totalDaFatura } from '../comum/fatura';
 import { SugestoesService } from '../sugestoes/sugestoes.module';
 
 const num = (d: Prisma.Decimal | null | undefined) => (d ? d.toNumber() : 0);
@@ -102,7 +103,7 @@ export class ResumoService {
         id: f.id,
         banco: f.conta.conexao.banco,
         vencimento: f.vencimento,
-        total: num(f.total),
+        total: totalDaFatura(f),
       })),
       proximasContas: contasAPagar.map((c) => ({
         id: c.id,

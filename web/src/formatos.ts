@@ -35,6 +35,15 @@ export const quando = (iso: string) => {
   return `${dia} às ${horaDe(iso)}`
 }
 
+// "ter 14/10 às 16:27": a hora ajuda a lembrar onde foi a compra
+export const diaEHora = (iso: string) => {
+  const d = new Date(iso)
+  // meia-noite UTC = o banco mandou só o dia, sem hora
+  if (iso.endsWith('T00:00:00.000Z')) return diaMes(iso)
+  const semana = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+  return `${semana} ${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${horaDe(iso)}`
+}
+
 export const mesAtual = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -76,3 +85,8 @@ export const lugarDaCompra = (descricao: string) =>
     .replace(/\b(LTDA?|S\/?A|ME|EIRELI)\b\.?/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+
+// "Padaria · ter 14/10 às 16:27 · cartão final 7421": o que ajuda a lembrar
+// onde foi a compra quando o nome que o banco manda não diz nada
+export const ondeFoi = (l: { data: string; tipoDoLugar: string | null; cartaoFinal: string | null }) =>
+  [l.tipoDoLugar, diaEHora(l.data), l.cartaoFinal && `cartão final ${l.cartaoFinal}`].filter(Boolean).join(' · ')

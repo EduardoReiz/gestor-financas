@@ -38,6 +38,8 @@ export interface PluggyLancamento {
     installmentNumber?: number;
     totalInstallments?: number;
     billId?: string;
+    cardNumber?: string;
+    payeeMCC?: number;
   } | null;
 }
 
