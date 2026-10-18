@@ -268,7 +268,8 @@ export class SincronizacaoService {
       const existente = existentes.get(l.id);
       // categoria escolhida na mão (ou a da conta fixa que ele pagou) nunca é trocada
       const fixa = existente?.origemCategoria === 'MANUAL' || existente?.origemCategoria === 'CONTA_FIXA';
-      const compra = sentido === 'SAIDA' && (!!meta || /^CARTAO DEBITO/i.test(l.description));
+      // compra em loja: tem tipo de loja (cartão) ou é débito no cartão; IOF e tarifas não
+      const compra = sentido === 'SAIDA' && (!!meta?.payeeMCC || /^CARTAO DEBITO/i.test(l.description));
       const categoria = fixa
         ? null
         : await this.categoriaPara(l.description, l.categoryId, sentido, regras, Math.abs(l.amount), {
