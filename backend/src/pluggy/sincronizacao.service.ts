@@ -277,10 +277,30 @@ export class SincronizacaoService {
             compraRecente: compra && data >= inicioDoMesPassado,
           });
 
+      // a compra que você lançou à mão (o banco tinha deixado de fora) e que
+      // agora chegou: vira a mesma, não entra em dobro; a sua categoria fica
+      const lancadaAMao = existente
+        ? null
+        : await this.prisma.lancamento.findFirst({
+            where: {
+              contaId,
+              pluggyTransactionId: null,
+              sentido,
+              valor: Math.abs(l.amount),
+              data: { gte: new Date(data.getTime() - 3 * DIA), lte: new Date(data.getTime() + 3 * DIA) },
+            },
+            orderBy: { data: 'asc' },
+          });
+
       if (existente) {
         await this.prisma.lancamento.update({
           where: { pluggyTransactionId: l.id },
           data: { ...doBanco, ...(categoria && categoria) },
+        });
+      } else if (lancadaAMao) {
+        await this.prisma.lancamento.update({
+          where: { id: lancadaAMao.id },
+          data: { pluggyTransactionId: l.id, ...doBanco, faturaId: doBanco.faturaId ?? lancadaAMao.faturaId },
         });
       } else {
         await this.prisma.lancamento.create({
