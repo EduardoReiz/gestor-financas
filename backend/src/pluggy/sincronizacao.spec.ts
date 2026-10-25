@@ -5,6 +5,7 @@ import {
   cicloAberto,
   inicioDaSemana,
   itensConfigurados,
+  terminouDeAtualizar,
 } from './sincronizacao.service';
 
 const dia = (d: Date) => d.toISOString().slice(0, 10);
@@ -106,5 +107,23 @@ describe('itensConfigurados', () => {
   it('sem variável de ambiente devolve lista vazia', () => {
     delete process.env.PLUGGY_ITENS;
     expect(itensConfigurados()).toEqual([]);
+  });
+});
+
+describe('terminouDeAtualizar', () => {
+  it('enquanto o Pluggy diz UPDATING, não terminou', () => {
+    expect(terminouDeAtualizar({ status: 'UPDATING', lastUpdatedAt: '2026-10-25T10:00:00Z' }, '2026-10-25T09:00:00Z', 60_000)).toBe(false);
+  });
+  it('UPDATED com data nova: terminou', () => {
+    expect(terminouDeAtualizar({ status: 'UPDATED', lastUpdatedAt: '2026-10-25T11:00:00Z' }, '2026-10-25T09:00:00Z', 8_000)).toBe(true);
+  });
+  it('UPDATED com a mesma data logo após o pedido: ainda não, pode ser o estado antigo', () => {
+    expect(terminouDeAtualizar({ status: 'UPDATED', lastUpdatedAt: '2026-10-25T09:00:00Z' }, '2026-10-25T09:00:00Z', 5_000)).toBe(false);
+  });
+  it('UPDATED com a mesma data depois de 20 segundos: terminou (o banco não tinha nada novo)', () => {
+    expect(terminouDeAtualizar({ status: 'UPDATED', lastUpdatedAt: '2026-10-25T09:00:00Z' }, '2026-10-25T09:00:00Z', 25_000)).toBe(true);
+  });
+  it('erro de login ou senha pedida: termina, mas não como atualizado', () => {
+    expect(terminouDeAtualizar({ status: 'LOGIN_ERROR', lastUpdatedAt: null }, null, 1_000)).toBe(true);
   });
 });

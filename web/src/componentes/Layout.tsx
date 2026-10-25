@@ -6,6 +6,7 @@ const secoes = [
   { para: '/extrato', nome: 'Extrato', Icone: IconeExtrato, naBarra: true },
   { para: '/cartoes', nome: 'Cartões', Icone: IconeCartao, naBarra: true },
   { para: '/contas', nome: 'Contas a pagar', curto: 'Contas', Icone: IconeCalendario, naBarra: true },
+  { para: '/sobra', nome: 'Sobra do mês', curto: 'Sobra', Icone: IconeAlvo, naBarra: true },
   { para: '/limites', nome: 'Limites', Icone: IconeMedidor, naBarra: true },
   { para: '/classificar', nome: 'Classificar gastos', Icone: IconeAlvo, naBarra: false },
   { para: '/metas', nome: 'Metas', Icone: IconeAlvo, naBarra: false },

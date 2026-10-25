@@ -15,6 +15,7 @@ import { Metas } from './telas/Metas'
 import { Investimentos } from './telas/Investimentos'
 import { Sugestoes } from './telas/Sugestoes'
 import { Planejamento } from './telas/Planejamento'
+import { Sobra } from './telas/Sobra'
 import { Limites } from './telas/Limites'
 import { Classificar } from './telas/Classificar'
 import { EnviarBoletos } from './telas/EnviarBoletos'
@@ -61,6 +62,7 @@ function App() {
           <Route path="investimentos" element={<Investimentos />} />
           <Route path="sugestoes" element={<Sugestoes />} />
           <Route path="planejamento" element={<Planejamento />} />
+          <Route path="sobra" element={<Sobra />} />
           <Route path="limites" element={<Limites />} />
           <Route path="classificar" element={<Classificar />} />
           <Route path="ajustes" element={<Ajustes aoSair={conferir} />} />

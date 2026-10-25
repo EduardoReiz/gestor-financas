@@ -31,6 +31,12 @@ class SincronizacaoController {
   sincronizar() {
     return this.sincronizacao.sincronizar();
   }
+
+  // botão "pedir dados novos aos bancos": o Pluggy busca no banco e depois sincroniza
+  @Post('atualizar-bancos')
+  atualizarBancos() {
+    return this.sincronizacao.atualizarBancos();
+  }
 }
 
 @Module({

@@ -72,6 +72,13 @@ export class PluggyClient {
     return this.pedir<PluggyItem>(`/items/${id}`);
   }
 
+  // Pede ao Pluggy para buscar dados novos no banco agora (PATCH /items/{id}).
+  // O Pluggy limita a 1 atualização por hora por banco e recusa quando o banco
+  // pede senha ou código de novo; a recusa chega aqui como erro com o motivo.
+  atualizarItem(id: string) {
+    return this.pedir<PluggyItem>(`/items/${id}`, 1, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{}' });
+  }
+
   async contas(itemId: string) {
     return (await this.pedir<{ results: PluggyConta[] }>(`/accounts?itemId=${itemId}`)).results;
   }
@@ -99,17 +106,18 @@ export class PluggyClient {
     return todos;
   }
 
-  private async pedir<T>(caminho: string, tentativa = 1): Promise<T> {
+  private async pedir<T>(caminho: string, tentativa = 1, opcoes: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<T> {
     const url = caminho.startsWith('http') ? caminho : `${BASE}${caminho}`;
-    const resposta = await fetch(url, { headers: { 'X-API-KEY': await this.apiKey() } });
+    const resposta = await fetch(url, { ...opcoes, headers: { ...opcoes.headers, 'X-API-KEY': await this.apiKey() } });
 
     if (resposta.status === 401 && tentativa === 1) {
       this.chave = undefined; // chave venceu antes do esperado: pede outra
-      return this.pedir(caminho, 2);
+      return this.pedir(caminho, 2, opcoes);
     }
-    if (resposta.status === 429 && tentativa <= 3) {
+    // 429 em atualização (PATCH) é o limite de 1 por hora: não adianta tentar de novo
+    if (resposta.status === 429 && tentativa <= 3 && !opcoes.method) {
       await new Promise((r) => setTimeout(r, 2000 * tentativa));
-      return this.pedir(caminho, tentativa + 1);
+      return this.pedir(caminho, tentativa + 1, opcoes);
     }
     if (!resposta.ok) {
       const corpo = await resposta.text();

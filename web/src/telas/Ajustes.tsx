@@ -115,6 +115,24 @@ function Bancos() {
   const { dados, erro, recarregar } = useApi(api.sincronizacao, [])
   const [rodando, setRodando] = useState(false)
   const [aviso, setAviso] = useState<string>()
+  const [bancos, setBancos] = useState<{ banco: string; situacao: string; detalhe?: string }[]>()
+
+  // Pede dado novo aos bancos pelo Pluggy (até 1 vez por hora por banco) e sincroniza.
+  async function atualizarBancos() {
+    setRodando(true)
+    setAviso(undefined)
+    setBancos(undefined)
+    try {
+      const r = await api.atualizarBancos()
+      setBancos(r.bancos)
+      setAviso(r.jaEstavaRodando ? 'Já estava sincronizando.' : `Pronto: ${r.novos} lançamentos novos.`)
+    } catch (e) {
+      setAviso(mensagemDeErro(e))
+    } finally {
+      setRodando(false)
+      recarregar()
+    }
+  }
 
   async function sincronizar() {
     setRodando(true)
@@ -147,7 +165,7 @@ function Bancos() {
             <p className={`text-sm ${ultima.sucesso === false ? 'text-ambar-texto' : 'text-suave'}`}>
               {ultima.sucesso === false
                 ? `A última sincronização falhou (${data(ultima.quando)}): ${ultima.erro}`
-                : `Última sincronização: ${new Date(ultima.quando).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}. Roda sozinha todo dia às 06:00.`}
+                : `Última sincronização: ${new Date(ultima.quando).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}. De hora em hora o app confere se algum banco tem dado novo e sincroniza sozinho.`}
             </p>
           )}
           <button
@@ -157,10 +175,31 @@ function Bancos() {
           >
             {rodando ? 'Sincronizando…' : 'Sincronizar agora'}
           </button>
+          <button
+            className="h-11.5 rounded-xl border border-floresta text-[15px] font-semibold text-floresta disabled:opacity-60"
+            disabled={rodando}
+            onClick={atualizarBancos}
+          >
+            {rodando ? 'Pedindo aos bancos… (até 2 min)' : 'Pedir dados novos aos bancos'}
+          </button>
+          <p className="text-xs text-suave">
+            "Sincronizar agora" só copia o que o Pluggy já tem. "Pedir dados novos" manda o Pluggy buscar no banco antes, no máximo 1 vez por hora por banco.
+            Compras de cartão e Pix ainda podem demorar a aparecer, porque o próprio banco as libera com atraso.
+          </p>
           {aviso && (
             <p role="status" className="text-sm text-floresta-escura">
               {aviso}
             </p>
+          )}
+          {bancos && (
+            <ul className="flex flex-col gap-1 text-sm text-suave">
+              {bancos.map((b) => (
+                <li key={b.banco}>
+                  {b.banco}: {b.situacao === 'atualizado' ? 'atualizado' : b.situacao === 'aguarde' ? 'aguarde' : b.situacao === 'demorando' ? 'ainda atualizando' : 'não deu'}
+                  {b.detalhe && ` (${b.detalhe})`}
+                </li>
+              ))}
+            </ul>
           )}
         </>
       )}

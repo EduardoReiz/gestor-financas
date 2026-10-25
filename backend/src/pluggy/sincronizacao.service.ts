@@ -44,10 +44,25 @@ export function itensConfigurados() {
     });
 }
 
+// O Pluggy aceita 1 pedido de atualização por hora por banco.
+const INTERVALO_ENTRE_PEDIDOS_MS = 60 * 60_000;
+const ESPERA_MAXIMA_MS = 120_000;
+
+// A atualização terminou quando o item saiu de UPDATING e o dado mudou. Logo
+// depois do pedido o status ainda pode mostrar o estado antigo, então sem mudança
+// de data só vale depois de uns segundos.
+export function terminouDeAtualizar(item: { status: string; lastUpdatedAt: string | null }, antes: string | null, decorridoMs: number): boolean {
+  if (item.status === 'UPDATING') return false;
+  if (item.status !== 'UPDATED') return true; // erro de login, senha pedida...: não vai mudar sozinho
+  return item.lastUpdatedAt !== antes || decorridoMs >= 20_000;
+}
+
 @Injectable()
 export class SincronizacaoService {
   private readonly log = new Logger('Sincronização');
   private rodando = false;
+  // quando pedimos dado novo a cada banco (o Pluggy aceita 1 pedido por hora)
+  private readonly pedidoEm = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -72,6 +87,49 @@ export class SincronizacaoService {
         return;
       }
     }
+  }
+
+  // "Atualizar bancos": pede ao Pluggy para buscar dado novo em cada banco agora,
+  // espera terminar (até 2 minutos) e então sincroniza. O dia a dia continua
+  // igual: de hora em hora o app só confere se há dado novo.
+  async atualizarBancos() {
+    const resultados: { banco: string; situacao: 'atualizado' | 'aguarde' | 'recusado' | 'demorando'; detalhe?: string }[] = [];
+    const esperando: { id: string; banco: string; antes: string | null; pediuEm: number }[] = [];
+
+    for (const { id, banco } of itensConfigurados()) {
+      const ultimo = this.pedidoEm.get(id);
+      if (ultimo && Date.now() - ultimo < INTERVALO_ENTRE_PEDIDOS_MS) {
+        const minutos = Math.ceil((INTERVALO_ENTRE_PEDIDOS_MS - (Date.now() - ultimo)) / 60_000);
+        resultados.push({ banco, situacao: 'aguarde', detalhe: `pedido há pouco; tente de novo em ${minutos} min` });
+        continue;
+      }
+      try {
+        const antes = (await this.pluggy.item(id)).lastUpdatedAt;
+        await this.pluggy.atualizarItem(id);
+        this.pedidoEm.set(id, Date.now());
+        esperando.push({ id, banco, antes, pediuEm: Date.now() });
+      } catch (erro) {
+        resultados.push({ banco, situacao: 'recusado', detalhe: (erro as Error).message.slice(0, 200) });
+      }
+    }
+
+    const limite = Date.now() + ESPERA_MAXIMA_MS;
+    while (esperando.length > 0 && Date.now() < limite) {
+      await new Promise((r) => setTimeout(r, 5000));
+      for (const e of [...esperando]) {
+        const item = await this.pluggy.item(e.id).catch(() => null);
+        if (item && terminouDeAtualizar(item, e.antes, Date.now() - e.pediuEm)) {
+          esperando.splice(esperando.indexOf(e), 1);
+          resultados.push(
+            item.status === 'UPDATED' ? { banco: e.banco, situacao: 'atualizado' } : { banco: e.banco, situacao: 'recusado', detalhe: `status ${item.status}` },
+          );
+        }
+      }
+    }
+    for (const e of esperando) resultados.push({ banco: e.banco, situacao: 'demorando', detalhe: 'o banco ainda está respondendo; a sincronização automática pega quando terminar' });
+
+    const sincronizacao = await this.sincronizar();
+    return { bancos: resultados, ...sincronizacao };
   }
 
   async sincronizar() {

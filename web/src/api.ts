@@ -139,6 +139,24 @@ export interface Orcamento {
   categorias: { id: string; nome: string }[]
 }
 
+export interface ItemDaSobra {
+  nome: string
+  valor: number
+  referencia?: boolean
+  vencimento?: string | null
+  paga?: boolean
+  fechamento?: string | null
+}
+
+export interface SobraDoMes {
+  mes: string
+  receitas: number
+  contas: number
+  faturas: number
+  sobra: number
+  itens: { receitas: ItemDaSobra[]; contas: ItemDaSobra[]; faturas: ItemDaSobra[] }
+}
+
 export interface Planejamento {
   mesAtual: boolean
   sobra: { saldoHoje: number; aReceber: number; contasEmAberto: number; faturaNoMes: number; sobraEstimada: number }
@@ -266,6 +284,12 @@ export interface EstadoSincronizacao {
 export const api = {
   sincronizacao: () => pedir<EstadoSincronizacao>('/sincronizacao'),
   sincronizar: () => pedir<{ novos?: number; jaEstavaRodando?: boolean }>('/sincronizacao', { method: 'POST' }),
+  atualizarBancos: () =>
+    pedir<{
+      novos?: number
+      jaEstavaRodando?: boolean
+      bancos: { banco: string; situacao: 'atualizado' | 'aguarde' | 'recusado' | 'demorando'; detalhe?: string }[]
+    }>('/sincronizacao/atualizar-bancos', { method: 'POST' }),
   resumo: (mes: string) => pedir<Resumo>(`/resumo?mes=${mes}`),
   lancamentos: (filtro: Record<string, string | undefined>) => {
     const params = new URLSearchParams(Object.entries(filtro).filter((par): par is [string, string] => !!par[1]))
@@ -285,6 +309,7 @@ export const api = {
     valorVariavel?: boolean
   }) => pedir('/contas/fixas', postar(dados)),
   planejamento: (mes: string) => pedir<Planejamento>(`/planejamento?mes=${mes}`),
+  sobra: (mes: string) => pedir<SobraDoMes>(`/planejamento/sobra?mes=${mes}`),
   limites: (mes: string) => pedir<Limites>(`/limites?mes=${mes}`),
   salvarReceita: (dados: { nome: string; valor: number; dia?: number; contem?: string }, id?: string) =>
     id ? pedir<void>(`/receitas/${id}`, { method: 'PATCH', body: JSON.stringify(dados) }) : pedir('/receitas', postar(dados)),

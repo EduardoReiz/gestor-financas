@@ -5,6 +5,7 @@ import { ArrayNotEmpty, IsArray, IsInt, IsNumber, IsOptional, IsPositive, IsStri
 import { PrismaService } from '../prisma/prisma.module';
 import { intervaloDoMes } from '../comum/mes';
 import { totalDaFatura } from '../comum/fatura';
+import { sobraDoMes } from '../comum/sobra';
 import { ContasModule, ContasService } from '../contas/contas.module';
 import { inicioDaSemana } from '../pluggy/sincronizacao.service';
 
@@ -27,8 +28,19 @@ class FiltroMes {
 
 const centavos = (v: number) => Math.round(v * 100) / 100;
 
+
+interface ItemDaSobra {
+  nome: string;
+  valor: number;
+  // valor de referência da conta fixa (ainda não é o real do mês)
+  referencia?: boolean;
+  vencimento?: Date | null;
+  paga?: boolean;
+  fechamento?: Date | null;
+}
+
 @Injectable()
-class PlanejamentoService {
+export class PlanejamentoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly contas: ContasService,
@@ -106,6 +118,61 @@ class PlanejamentoService {
         cartoes,
       },
       receitas,
+    };
+  }
+
+
+  // A sobra de UM mês, só com o que já se sabe:
+  //
+  //   toda a renda cadastrada
+  // − contas fixas do mês (valor real se já foi informado ou pago; senão o
+  //   valor de referência da conta, que você mantém na tela Contas)
+  // − fatura do cartão que vence no mês (o valor da fatura, não uma projeção)
+  // = sobra
+  //
+  // Sem média e sem suposição de gasto. Sem mês, mostra o mês que vem. Não grava
+  // nada: não cria as ocorrências das contas fixas.
+  async sobra(mes?: string) {
+    const hoje = new Date();
+    const padrao = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+    const { inicio, fim } = intervaloDoMes(mes ?? `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, '0')}`);
+
+    const [receitas, fixas, ocorrencias, faturas] = await Promise.all([
+      this.prisma.receita.findMany({ where: { ativa: true }, orderBy: [{ dia: 'asc' }, { nome: 'asc' }] }),
+      this.prisma.contaFixa.findMany({ where: { ativa: true, criadaEm: { lt: fim } }, orderBy: [{ diaVencimento: 'asc' }, { nome: 'asc' }] }),
+      this.prisma.contaAPagar.findMany({ where: { vencimento: { gte: inicio, lt: fim } } }),
+      this.prisma.fatura.findMany({
+        where: { vencimento: { gte: inicio, lt: fim } },
+        include: { conta: { include: { conexao: { select: { banco: true } } } } },
+        orderBy: { vencimento: 'asc' },
+      }),
+    ]);
+
+    const soma = (l: { valor: number }[]) => centavos(l.reduce((s, i) => s + i.valor, 0));
+    const itensReceitas: ItemDaSobra[] = receitas.map((r) => ({ nome: r.nome, valor: r.valor.toNumber() }));
+
+    const itensContas: ItemDaSobra[] = fixas.map((f) => {
+      const o = ocorrencias.find((x) => x.contaFixaId === f.id);
+      const real = !!o && (o.valorInformado || !!o.pagaEm);
+      return { nome: f.nome, valor: real ? o.valor.toNumber() : f.valorPrevisto.toNumber(), referencia: !real, paga: !!o?.pagaEm };
+    });
+    // boleto avulso cadastrado para o mês
+    for (const o of ocorrencias.filter((x) => !x.contaFixaId)) itensContas.push({ nome: o.nome, valor: o.valor.toNumber(), paga: !!o.pagaEm });
+
+    const itensFaturas: ItemDaSobra[] = faturas.map((f) => ({
+      nome: `Fatura ${f.conta.conexao.banco}`,
+      valor: totalDaFatura(f),
+      vencimento: f.vencimento,
+      fechamento: f.fechamento,
+      paga: f.paga,
+    }));
+
+    const totais = { receitas: soma(itensReceitas), contas: soma(itensContas), faturas: soma(itensFaturas) };
+    return {
+      mes: `${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, '0')}`,
+      ...totais,
+      sobra: sobraDoMes(totais),
+      itens: { receitas: itensReceitas, contas: itensContas, faturas: itensFaturas },
     };
   }
 
@@ -279,6 +346,11 @@ class PlanejamentoController {
   @Get('planejamento')
   doMes(@Query() filtro: FiltroMes) {
     return this.planejamento.doMes(filtro.mes);
+  }
+
+  @Get('planejamento/sobra')
+  sobra(@Query() filtro: FiltroMes) {
+    return this.planejamento.sobra(filtro.mes);
   }
 
   @Get('limites')
