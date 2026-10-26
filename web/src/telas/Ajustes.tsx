@@ -207,10 +207,10 @@ function Bancos() {
   )
 }
 
-// Convite para alguém (a Convidado) só enviar boletos: código de uso único, 48 horas.
+// Convite para alguém (a pessoa convidada) só enviar boletos: código de uso único, 48 horas.
 function Convites({ aoMudar }: { aoMudar: () => void }) {
   const { dados: abertos = [], recarregar } = useApi(auth.convites, [])
-  const [pessoa, setPessoa] = useState('Convidado')
+  const [pessoa, setPessoa] = useState('')
   const [novo, setNovo] = useState<{ codigo: string; validoAte: string }>()
   const [erro, setErro] = useState<string>()
 

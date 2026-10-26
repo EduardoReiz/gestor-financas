@@ -27,7 +27,7 @@ const campo = 'h-12 rounded-xl border border-borda-forte bg-white px-3.5 text-ba
 export function Entrar({ primeiroAcesso, aoEntrar }: { primeiroAcesso: boolean; aoEntrar: () => void }) {
   const [codigo, setCodigo] = useState('')
   const [aparelho, setAparelho] = useState(nomeDoAparelho)
-  // "Tenho um convite": quem vai só enviar boletos (a Convidado) entra por aqui
+  // "Tenho um convite": quem vai só enviar boletos (a pessoa convidada) entra por aqui
   const [comConvite, setComConvite] = useState(() => new URLSearchParams(location.search).has('convite'))
   const [convite, setConvite] = useState(() => new URLSearchParams(location.search).get('convite') ?? '')
   const [ocupado, setOcupado] = useState(false)

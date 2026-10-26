@@ -125,7 +125,7 @@ function Bloco({
       )}
       {dica && (
         <p className="text-xs text-suave">
-          Conta com "valor de referência" ainda não teve o valor real do mês. Para mudar a referência (energia, fatura do Nubank da Convidado), edite a conta na tela{' '}
+          Conta com "valor de referência" ainda não teve o valor real do mês. Para mudar a referência (energia, fatura do cartão), edite a conta na tela{' '}
           <Link to="/contas" className="font-semibold text-floresta">
             Contas
           </Link>

@@ -4,7 +4,7 @@ import { IconeBroto } from '../componentes/Icones'
 import { brl, diaMes } from '../formatos'
 import { AdicionarCodigo } from './Codigos'
 
-// O app inteiro de quem só envia boletos (a Convidado): mandar e acompanhar.
+// O app inteiro de quem só envia boletos (a pessoa convidada): mandar e acompanhar.
 // Nada das suas finanças aparece aqui (e o servidor também não deixa).
 export function EnviarBoletos({ pessoa, aoSair }: { pessoa: string | null; aoSair: () => void }) {
   const { dados, erro, recarregar } = useApi(api.cobrancasEnviadas, [])

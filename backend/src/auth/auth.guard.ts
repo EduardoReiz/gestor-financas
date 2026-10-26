@@ -12,7 +12,7 @@ export const COOKIE_DESAFIO = 'gf_desafio';
 const PUBLICO = 'rota-publica';
 export const Publico = () => SetMetadata(PUBLICO, true);
 
-// O acesso de ENVIO (a Convidado) só passa pelas rotas marcadas com @PermiteEnvio().
+// O acesso de ENVIO (a pessoa convidada) só passa pelas rotas marcadas com @PermiteEnvio().
 // Tudo o que não tiver a marca é negado para ele: esquecer a marca fecha, não abre.
 const PERMITE_ENVIO = 'permite-envio';
 export const PermiteEnvio = () => SetMetadata(PERMITE_ENVIO, true);

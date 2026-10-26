@@ -17,7 +17,7 @@ datasource db {
 // ---------- Acesso ----------
 
 // Face ID / Touch ID (WebAuthn). Uma linha por aparelho cadastrado.
-// DONO vê tudo. ENVIO só manda boletos e Pix para o dono pagar (a Convidado).
+// DONO vê tudo. ENVIO só manda boletos e Pix para o dono pagar (a pessoa convidada).
 enum Papel {
   DONO
   ENVIO
@@ -267,7 +267,7 @@ model Cobranca {
   pagaEm        DateTime?
   lancamentoId  String?      @unique
   lancamento    Lancamento?  @relation(fields: [lancamentoId], references: [id])
-  // quem mandou (a Convidado pelo acesso de envio); vazio = você mesmo
+  // quem mandou (a pessoa convidada pelo acesso de envio); vazio = você mesmo
   enviadaPorId  String?
   enviadaPor    Passkey?     @relation(fields: [enviadaPorId], references: [id], onDelete: SetNull)
   criadaEm      DateTime     @default(now())

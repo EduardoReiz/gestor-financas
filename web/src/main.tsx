@@ -47,7 +47,7 @@ function App() {
       </div>
     )
   if (!estado.logado) return <Entrar primeiroAcesso={estado.primeiroAcesso} aoEntrar={conferir} />
-  // acesso só de envio (a Convidado): uma tela só, sem nada das finanças
+  // acesso só de envio (a pessoa convidada): uma tela só, sem nada das finanças
   if (estado.papel === 'ENVIO') return <EnviarBoletos pessoa={estado.pessoa} aoSair={conferir} />
 
   return (

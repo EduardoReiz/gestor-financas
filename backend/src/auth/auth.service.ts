@@ -82,7 +82,7 @@ export class AuthService {
       rpID: this.rp.id,
       userName: pessoa,
       userDisplayName: conviteId ? `${pessoa} (envio de boletos)` : 'Dono do GestorDeFinanças',
-      // cada pessoa tem o seu "usuário": a passkey da Convidado não se mistura com a sua
+      // cada pessoa tem o seu "usuário": a passkey da pessoa convidada não se mistura com a sua
       userID: conviteId ? new TextEncoder().encode(`gestor-financas-${conviteId}`) : ID_DO_DONO,
       attestationType: 'none',
       excludeCredentials: existentes.map((p) => ({ id: p.credentialId, transports: p.transports })),
